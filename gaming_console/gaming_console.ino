@@ -1,10 +1,7 @@
-/*************************************************************************************************** * IFM LABZ + SECRET CODE
-/***************************************************************************************************
- * IFM LABZ + SECRET CODE GAME (cleaned)
- * - Removed SD/Image/Reaction/Joystick-demo menu code
- * - Kept game logic and joystick behavior exactly as in your current working version
- * - Runs directly in game mode
- ***************************************************************************************************/
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 
 #include "SPI.h"
 #include "Adafruit_ST7735.h"
@@ -85,6 +82,22 @@
 ****************************************************************************************************/
 
 #define BUZZER_PIN 8 
+
+/*************************************************************************************************
+                                      DEFINES-Bluetooth
+***************************************************************************************************/
+#define BLE_DEVICE_NAME "IFM Gaming Console"
+#define BLE_SERVICE_UUID        "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define BLE_CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E" // phone -> board
+#define BLE_CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" // board -> phone
+
+BLEServer* pServer = nullptr;
+BLECharacteristic* pTxCharacteristic = nullptr;
+bool bleDeviceConnected = false;
+bool bleOldDeviceConnected = false;
+
+String bleRxCommand = "";
+bool bleCommandReady = false;
 
 /***************************************************************************************************
  *                                     GLOBALS
@@ -176,11 +189,52 @@ static void SG_updatePcaLeds(uint8_t value);
 static void SG_drawShop(void);
 static void SG_awardPointsAfterGuess(uint8_t exactNow);
 
+/**********************************************************************************************
+                                  BLUETOOTH
+***********************************************************************************************/
+/*
+  SERVICE_UUID-for the game
+  RX-phone to console
+  TX-console to phone
+*/
+
+static void BLE_init(void);
+static void BLE_sendLine(const String& s);
+static void BLE_sendStatus(void);
+static void BLE_handleCommand(const String& cmd);
+static void BLE_poll(void);
+
+class BleServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) override {
+    bleDeviceConnected = true;
+    Serial.println("BLE connected");
+  }
+
+  void onDisconnect(BLEServer* pServer) override {
+    bleDeviceConnected = false;
+    Serial.println("BLE disconnected");
+  }
+};
+
+class BleRxCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* pCharacteristic) override {
+    std::string rx = pCharacteristic->getValue();
+    if (!rx.empty()) {
+      bleRxCommand = "";
+      for (size_t i = 0; i < rx.size(); i++) bleRxCommand += (char)rx[i];
+      bleRxCommand.trim();
+      bleCommandReady = true;
+    }
+  }
+};
+
 /***************************************************************************************************
  *                                     SETUP
  ***************************************************************************************************/
 void setup() {
   SERIAL_init();
+
+  BLE_init();
 
   pinMode(SW1_PIN, INPUT);
   pinMode(SW2_PIN, INPUT);
@@ -267,6 +321,8 @@ void loop() {
     Task2_5ms();
     previousMillis5ms = currentMillis;
   }
+
+  BLE_poll();
 }
 
 /***************************************************************************************************
@@ -324,6 +380,7 @@ static void buttonReactSw1(void) {
       totalScore -= 30;
       hintInventory++;
       SG_drawShop();
+      BLE_sendStatus();
     }
     return;
   }
@@ -340,6 +397,7 @@ static void buttonReactSw1(void) {
   Serial.print((unsigned)(pos + 1));
   Serial.print("=");
   Serial.println((unsigned)val);
+  BLE_sendStatus();
 }
 }
 
@@ -399,6 +457,7 @@ static void buttonReactSw4(void) {
       totalScore -= 50;
       jamInventory++;
       SG_drawShop();
+      BLE_sendStatus();
     }
     return;
   }
@@ -414,6 +473,8 @@ static void buttonReactSw4(void) {
     LcdUtils_printLine("JAM armed", RED, FONT_DEFAULT);
 
     Serial.println("JAM armed");
+
+    BLE_sendStatus();
   }
 }
 static void processButtons(void) {
@@ -486,6 +547,7 @@ static void SG_resetRound(void) {
   jamArmed = false;
   SG_updatePcaLeds(0);
   SG_drawPickSecret();
+  BLE_sendStatus();
 }
 
 static void SG_awardPointsAfterGuess(uint8_t exactNow) {
@@ -766,6 +828,7 @@ static void SG_applyGuess(void) {
     secretGameState = SG_SHOW_RESULT;
     SG_drawResult();
   }
+  BLE_sendStatus();
 }
 
 static void SG_evalGuess(uint8_t guess[3], uint8_t secret[3], uint8_t* exact, uint8_t* partial) {
@@ -808,6 +871,111 @@ static void SG_updatePcaLeds(uint8_t value) {
 /***************************************************************************************************
  *                                     INIT FUNCTIONS
  ***************************************************************************************************/
+static void BLE_init(void) {
+  BLEDevice::init(BLE_DEVICE_NAME);
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new BleServerCallbacks());
+
+  BLEService* pService = pServer->createService(BLE_SERVICE_UUID);
+
+  pTxCharacteristic = pService->createCharacteristic(
+    BLE_CHARACTERISTIC_UUID_TX,
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pTxCharacteristic->addDescriptor(new BLE2902());
+
+  BLECharacteristic* pRxCharacteristic = pService->createCharacteristic(
+    BLE_CHARACTERISTIC_UUID_RX,
+    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
+  );
+  pRxCharacteristic->setCallbacks(new BleRxCallbacks());
+
+  pService->start();
+
+  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(BLE_SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  BLEDevice::startAdvertising();
+
+  Serial.println("BLE advertising: IFM-SecretGame");
+}
+
+static void BLE_sendLine(const String& s) {
+  if (!bleDeviceConnected || pTxCharacteristic == nullptr) return;
+  String msg = s + "\n";
+  pTxCharacteristic->setValue((uint8_t*)msg.c_str(), msg.length());
+  pTxCharacteristic->notify();
+}
+
+static void BLE_sendStatus(void) {
+  String st;
+  st.reserve(120);
+  st += "STATE:" + String((int)secretGameState);
+  st += ",SCORE:" + String(totalScore);
+  st += ",TRY:" + String((int)attemptCount) + "/" + String((int)maxAttempts);
+  st += ",EX:" + String((int)lastExact);
+  st += ",PA:" + String((int)lastPartial);
+  st += ",H:" + String((int)hintInventory);
+  st += ",J:" + String((int)jamInventory);
+  BLE_sendLine(st);
+}
+
+static void BLE_handleCommand(const String& cmdIn) {
+  String cmd = cmdIn;
+  cmd.trim();
+  cmd.toUpperCase();
+
+  if (cmd == "STATUS") {
+    BLE_sendStatus();
+    return;
+  }
+  if (cmd == "RESET") {
+    SG_resetRound();
+    BLE_sendLine("OK:RESET");
+    BLE_sendStatus();
+    return;
+  }
+  if (cmd == "HINT") {
+    buttonReactSw1();   
+    BLE_sendLine("OK:HINT");
+    BLE_sendStatus();
+    return;
+  }
+  if (cmd == "JAM") {
+    buttonReactSw4();   
+    BLE_sendLine("OK:JAM");
+    BLE_sendStatus();
+    return;
+  }
+  if (cmd == "SUBMIT") {
+    buttonReactSw3();   
+    BLE_sendLine("OK:SUBMIT");
+    BLE_sendStatus();
+    return;
+  }
+
+  BLE_sendLine("ERR:UNKNOWN_CMD");
+}
+
+static void BLE_poll(void) {
+  if (bleCommandReady) {
+    bleCommandReady = false;
+    BLE_handleCommand(bleRxCommand);
+  }
+
+  // reconnect advertising after disconnect
+  if (!bleDeviceConnected && bleOldDeviceConnected) {
+    delay(100);
+    pServer->startAdvertising();
+    bleOldDeviceConnected = bleDeviceConnected;
+  }
+  if (bleDeviceConnected && !bleOldDeviceConnected) {
+    bleOldDeviceConnected = bleDeviceConnected;
+    BLE_sendLine("HELLO:IFM-SecretGame");
+    BLE_sendStatus();
+  }
+}
+
 static bool SERIAL_init(void) {
   Serial.begin(115200);
   unsigned long startWait = millis();
