@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F0F12"
+    android:padding="24dp"
+    tools:context=".AboutUsActivity">
+
+    <TextView
+        android:id="@+id/tvAboutTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:letterSpacing="0.1"
+        android:text="DEVELOPMENT TEAM"
+        android:textColor="#FF7A00"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.047"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.054" />
+
+    <TextView
+        android:id="@+id/tvAboutSubtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="The minds behind NEXUS: THE CODEBREAKER"
+        android:textColor="#88888F"
+        android:textSize="12sp"
+        android:textStyle="italic"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.046"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvAboutTitle"
+        app:layout_constraintVertical_bias="0.088" />
+
+    <TextView
+        android:id="@+id/tvAboutContent"
+        android:layout_width="535dp"
+        android:layout_height="206dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="24dp"
+        android:lineSpacingMultiplier="1.2"
+        android:text="&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;PROJECT: &lt;/b&gt;&lt;/font&gt; NEXUS: THE CODEBREAKER (IFM Labz Console Challenge)&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;AGENTS IN CHARGE:&lt;/b&gt;&lt;/font&gt; Two Pasionate Software Engineering Students at LBUS who enjoy new challenges every day&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;MISSION OBJECTIVE:&lt;/b&gt;&lt;/font&gt; To design and build a gaming console that features a game that shows secret featuresc for each player.&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;CONTACT:&lt;/b&gt;&lt;/font&gt; POPA MARIA/DEAC STEFAN"
+        android:textColor="#E2E2E6"
+        android:textSize="16sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btnBackAbout"
+        app:layout_constraintHorizontal_bias="0.333"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvAboutSubtitle"
+        app:layout_constraintVertical_bias="0.382" />
+
+    <Button
+        android:id="@+id/btnBackAbout"
+        android:layout_width="180dp"
+        android:layout_height="54dp"
+        android:backgroundTint="#FF7A00"
+        android:text="BACK TO MENU"
+        android:textColor="#E2E2E6"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.972"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.55" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
