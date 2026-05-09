@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F0F12"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/tvHowToTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:letterSpacing="0.1"
+        android:text="MISSION RULES"
+        android:textColor="#FF7A00"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.044"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.069" />
+
+    <TextView
+        android:id="@+id/tvHowToSubtitle"
+        android:layout_width="196dp"
+        android:layout_height="21dp"
+        android:layout_marginTop="4dp"
+        android:text="How the console and the game works"
+        android:textColor="#88888F"
+        android:textSize="13sp"
+        android:textStyle="italic"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.044"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvHowToTitle"
+        app:layout_constraintVertical_bias="0.031" />
+
+    <TextView
+        android:id="@+id/tvRulesContent"
+        android:layout_width="582dp"
+        android:layout_height="238dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="24dp"
+        android:lineSpacingMultiplier="1.2"
+        android:text="&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;1. CONNECTION:&lt;/b&gt;&lt;/font&gt; Ensure your console is powered on and connected to the same Wi-Fi network as this phone.&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;2. SERVER STATUS:&lt;/b&gt;&lt;/font&gt; Your phone acts as the central host, synchronizing gameplay data in real-time.&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;3. THE MISSION:&lt;/b&gt;&lt;/font&gt; Each player chooses a secret number that the other has to guess. Yoou have 8 atempts to guess the number!&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;4. SHOP:&lt;/b&gt;&lt;/font&gt; Use the point that you gained to buy boosters that will help you!"
+        android:textAllCaps="true"
+        android:textColor="#E2E2E6"
+        android:textSize="15sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btnBack"
+        app:layout_constraintHorizontal_bias="0.591"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvHowToSubtitle"
+        app:layout_constraintVertical_bias="0.722" />
+
+    <Button
+        android:id="@+id/btnBack"
+        android:layout_width="180dp"
+        android:layout_height="54dp"
+        android:layout_marginEnd="8dp"
+        android:backgroundTint="#FF7A00"
+        android:text="BACK TO MENU"
+        android:textColor="#E2E2E6"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.533" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
