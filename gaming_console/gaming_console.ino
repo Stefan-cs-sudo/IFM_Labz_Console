@@ -1,1014 +1,238 @@
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
-
+#include <WiFi.h> // Pentru ESP32
 #include "SPI.h"
 #include "Adafruit_ST7735.h"
 #include "pca9557_cdd.h"
 #include "LcdUtils.h"
 
-/***************************************************************************************************
- *                                     DEFINES — Timing
- ***************************************************************************************************/
-#define CYCLE_TIME_10MS 10
-#define CYCLE_TIME_5MS 5
-#define DEBOUNCE_MS 120
+// WIFI SETTINGS
+const char* ssid = "POCOX7Pro"; 
+const char* password = "23062005";
+const char* serverIP = "10.130.147.77"; // PHONE IP
+const int serverPort = 8080;
 
-/***************************************************************************************************
- *                                     DEFINES — Push Buttons
- ***************************************************************************************************/
+WiFiClient client;
+
+// HARDWARE PINS
 #define SW1_PIN 3
 #define SW2_PIN 2
 #define SW3_PIN 4
 #define SW4_PIN 9
-
-/***************************************************************************************************
- *                                     DEFINES — Joystick
- ***************************************************************************************************/
 #define JOY_VRX_PIN A0
 #define JOY_VRY_PIN A1
 #define JOY_BUTTON A2
-
-/***************************************************************************************************
- *                                     DEFINES — LCD Pins
- ***************************************************************************************************/
-#if defined(D5)
-#define LCD_RST_PIN D5
-#else
-#define LCD_RST_PIN 5
-#endif
-
-#if defined(D6)
-#define LCD_CS_PIN D6
-#else
 #define LCD_CS_PIN 6
-#endif
-
-#if defined(D7)
-#define LCD_DC_PIN D7
-#else
 #define LCD_DC_PIN 7
-#endif
-
-#if defined(D10)
-#define LCD_BCKL_PIN D10
-#else
-#define LCD_BCKL_PIN 10
-#endif
-
-/***************************************************************************************************
- *                                     DEFINES — PCA9557
- ***************************************************************************************************/
+#define LCD_RST_PIN 5
+#define BUZZER_PIN 8 
 #define PCA_ADDRESS 25
 
-/***************************************************************************************************
- *                                     SECRET GAME STATES
- ***************************************************************************************************/
-#define SG_IDLE 0U
-#define SG_PICK_SECRET 1U
-#define SG_PICK_GUESS 2U
-#define SG_SHOW_RESULT 3U
-#define SG_WIN 4U
-#define SG_SHOP 5U
+Adafruit_ST7735 lcd = Adafruit_ST7735(LCD_CS_PIN, LCD_DC_PIN, LCD_RST_PIN);
 
-/***************************************************************************************************
- *                                     DEFINES — Display Geometry
- ***************************************************************************************************/
-#define ST77XX_GRAY 0x7BEF
-
-/**************************************************************************************************
-                                      DEFINES- BUZZER
-****************************************************************************************************/
-
-#define BUZZER_PIN 8 
-
-/*************************************************************************************************
-                                      DEFINES-Bluetooth
-***************************************************************************************************/
-#define BLE_DEVICE_NAME "IFM Gaming Console"
-#define BLE_SERVICE_UUID        "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-#define BLE_CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E" // phone -> board
-#define BLE_CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" // board -> phone
-
-BLEServer* pServer = nullptr;
-BLECharacteristic* pTxCharacteristic = nullptr;
-bool bleDeviceConnected = false;
-bool bleOldDeviceConnected = false;
-
-String bleRxCommand = "";
-bool bleCommandReady = false;
-
-/***************************************************************************************************
- *                                     GLOBALS
- ***************************************************************************************************/
-unsigned long time0 = 0;
-
-volatile bool B1Pressed = false;
-volatile bool B2Pressed = false;
-volatile bool B3Pressed = false;
-volatile bool B4Pressed = false;
-
-volatile unsigned long lastISR_SW1 = 0;
-volatile unsigned long lastISR_SW2 = 0;
-volatile unsigned long lastISR_SW3 = 0;
-volatile unsigned long lastISR_SW4 = 0;
-
-int joyCenterX = 2048;
-int joyCenterY = 2048;
-
-/* LCD obj */
-Adafruit_ST7735 lcd = Adafruit_ST7735(LCD_CS_PIN, LCD_DC_PIN, -1);
-
-/***************************************************************************************************
- *                              SECRET CODE GAME DATA
- ***************************************************************************************************/
-uint8_t secretGameState = SG_IDLE;
-uint8_t secretCode[3] = {0, 0, 0};
-uint8_t guessCode[3] = {0, 0, 0};
+// GAME VARIABLES 
+uint8_t freqDigits[3] = {0, 0, 0};
 uint8_t selectedIdx = 0;
-uint8_t attemptCount = 0;
-uint8_t maxAttempts = 8;
-uint8_t lastExact = 0;
-uint8_t lastPartial = 0;
-bool secretLocked = false;
+String serverMessage = "CONNECTING...";
 unsigned long lastJoyMoveMs = 0;
+int joyCenterX = 2048, joyCenterY = 2048;
 
-long totalScore = 0;
-uint8_t prevExactForCombo = 0;
+// ISR variables 
+volatile bool B1Pressed = false, B2Pressed = false, B3Pressed = false, B4Pressed = false;
+unsigned long lastISR_SW1 = 0, lastISR_SW2 = 0, lastISR_SW3 = 0, lastISR_SW4 = 0;
+#define DEBOUNCE_MS 120
 
-uint8_t bestExactThisRound = 0;
+unsigned long lastReconnectAttempt = 0;
 
-uint8_t hintInventory = 0;
-uint8_t jamInventory = 0;
+// PROTOTYPES
+void drawTerminal();
+void sendToServer(String msg);
+void handleServerData();
+void handleJoystick();
+void playBeep();
 
-int8_t  jamDirections[3]  = {0, 0, 0}; // 1=secret higher(^), -1=lower(v), 0=exact(=)
-bool    jamResultActive   = false;
+// ISR
+void IRAM_ATTR ISR_SW1() { if (millis() - lastISR_SW1 >= DEBOUNCE_MS) { lastISR_SW1 = millis(); B1Pressed = true; } }
+void IRAM_ATTR ISR_SW2() { if (millis() - lastISR_SW2 >= DEBOUNCE_MS) { lastISR_SW2 = millis(); B2Pressed = true; } }
+void IRAM_ATTR ISR_SW3() { if (millis() - lastISR_SW3 >= DEBOUNCE_MS) { lastISR_SW3 = millis(); B3Pressed = true; } }
+void IRAM_ATTR ISR_SW4() { if (millis() - lastISR_SW4 >= DEBOUNCE_MS) { lastISR_SW4 = millis(); B4Pressed = true; } }
 
-bool hintUsedThisRound = false;
-bool jamUsedThisRound = false;
-bool jamArmed = false;
-
-/***************************************************************************************************
- *                                     PROTOTYPES
- ***************************************************************************************************/
-void IRAM_ATTR ISR_SW1(void);
-void IRAM_ATTR ISR_SW2(void);
-void IRAM_ATTR ISR_SW3(void);
-void IRAM_ATTR ISR_SW4(void);
-
-void Task1_10ms(void);
-void Task2_5ms(void);
-
-static bool LCD_init(void);
-static bool SERIAL_init(void);
-
-static void buttonReactSw1(void);
-static void buttonReactSw2(void);
-static void buttonReactSw3(void);
-static void buttonReactSw4(void);
-static void processButtons(void);
-
-static void playWinMelody(void);
-static void playLoseMelody(void);
-
-/* secret game helpers */
-static void SG_enter(void);
-static void SG_resetRound(void);
-static void SG_drawPickSecret(void);
-static void SG_drawPickGuess(void);
-static void SG_drawResult(void);
-static void SG_drawWin(void);
-static void SG_showHintBlink(uint8_t pos, uint8_t val);
-static void SG_handleJoystick(void);
-static void SG_applyGuess(void);
-static void SG_evalGuess(uint8_t guess[3], uint8_t secret[3], uint8_t* exact, uint8_t* partial);
-static void SG_updatePcaLeds(uint8_t value);
-
-
-static void SG_drawShop(void);
-static void SG_awardPointsAfterGuess(uint8_t exactNow);
-
-/**********************************************************************************************
-                                  BLUETOOTH
-***********************************************************************************************/
-/*
-  SERVICE_UUID-for the game
-  RX-phone to console
-  TX-console to phone
-*/
-
-static void BLE_init(void);
-static void BLE_sendLine(const String& s);
-static void BLE_sendStatus(void);
-static void BLE_handleCommand(const String& cmd);
-static void BLE_poll(void);
-
-class BleServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer* pServer) override {
-    bleDeviceConnected = true;
-    Serial.println("BLE connected");
-  }
-
-  void onDisconnect(BLEServer* pServer) override {
-    bleDeviceConnected = false;
-    Serial.println("BLE disconnected");
-  }
-};
-
-class BleRxCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* pCharacteristic) override {
-    std::string rx = pCharacteristic->getValue();
-    if (!rx.empty()) {
-      bleRxCommand = "";
-      for (size_t i = 0; i < rx.size(); i++) bleRxCommand += (char)rx[i];
-      bleRxCommand.trim();
-      bleCommandReady = true;
-    }
-  }
-};
-
-/***************************************************************************************************
- *                                     SETUP
- ***************************************************************************************************/
 void setup() {
-  SERIAL_init();
+  Serial.begin(115200);
 
-  BLE_init();
-
-  pinMode(SW1_PIN, INPUT);
-  pinMode(SW2_PIN, INPUT);
-  pinMode(SW3_PIN, INPUT);
-  pinMode(SW4_PIN, INPUT);
-
-  pinMode(BUZZER_PIN, OUTPUT);
-  digitalWrite(BUZZER_PIN, LOW);
-
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
-
-  if (LCD_init()) {
-    LcdUtils_init(&lcd);
-  } else {
-    digitalWrite(LED_BUILTIN, HIGH);
-    while (1) ;
-  }
-
-  if (PCA_initialize(PCA_ADDRESS)) {
-    Serial.println("PCA OK");
-  } else {
-    Serial.println("PCA FAILED");
-  }
-
-  pinMode(LED_RED, OUTPUT);
-  pinMode(LED_GREEN, OUTPUT);
-  pinMode(LED_BLUE, OUTPUT);
-  digitalWrite(LED_RED, LOW);    // magenta
-  digitalWrite(LED_GREEN, HIGH);
-  digitalWrite(LED_BLUE, LOW);
-
-  analogReadResolution(12);
-  long sumX = 0, sumY = 0;
-  for (int i = 0; i < 16; i++) {
-    sumX += analogRead(JOY_VRY_PIN);
-    sumY += analogRead(JOY_VRX_PIN);
-    delay(5);
-  }
-  joyCenterX = sumX / 16;
-  joyCenterY = sumY / 16;
-
-  randomSeed(analogRead(7));
-  time0 = millis();
-
-  digitalWrite(LCD_RST_PIN, HIGH);
-  delay(50);
-  digitalWrite(LCD_RST_PIN, LOW);
-  delay(50);
-  digitalWrite(LCD_RST_PIN, HIGH);
-  delay(150);
-  SPI.begin();
-  lcd.initR(INITR_TDO128x96);
-  lcd.setSPISpeed(16000000UL);
-  lcd.setRotation(0);
-  lcd.fillScreen(ST77XX_BLACK);
-  lcd.setTextWrap(false);
-  lcd.setTextSize(1);
-  LcdUtils_init(&lcd);
+  int n = WiFi.scanNetworks();
+Serial.println("Retele gasite:");
+for (int i = 0; i < n; i++) {
+    Serial.print(WiFi.SSID(i));
+    Serial.print(" (");
+    Serial.print(WiFi.RSSI(i));
+    Serial.println(" dBm)");
+}
+  
+  pinMode(SW1_PIN, INPUT); pinMode(SW2_PIN, INPUT);
+  pinMode(SW3_PIN, INPUT); pinMode(SW4_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT); digitalWrite(BUZZER_PIN, LOW);
 
   attachInterrupt(digitalPinToInterrupt(SW1_PIN), ISR_SW1, FALLING);
   attachInterrupt(digitalPinToInterrupt(SW2_PIN), ISR_SW2, FALLING);
   attachInterrupt(digitalPinToInterrupt(SW3_PIN), ISR_SW3, FALLING);
   attachInterrupt(digitalPinToInterrupt(SW4_PIN), ISR_SW4, FALLING);
 
-  SG_enter();
-  Serial.println("Secret game ready");
-}
-
-/***************************************************************************************************
- *                                     LOOP
- ***************************************************************************************************/
-void loop() {
-  static unsigned long previousMillis5ms = 0;
-  static unsigned long previousMillis10ms = 0;
-  unsigned long currentMillis = millis();
-
-  if (currentMillis - previousMillis10ms >= CYCLE_TIME_10MS) {
-    Task1_10ms();
-    previousMillis10ms = currentMillis;
-  }
-
-  if (currentMillis - previousMillis5ms >= CYCLE_TIME_5MS) {
-    Task2_5ms();
-    previousMillis5ms = currentMillis;
-  }
-
-  BLE_poll();
-}
-
-/***************************************************************************************************
- *                                     TASKS
- ***************************************************************************************************/
-void Task1_10ms(void) {
-  processButtons();
-}
-
-void Task2_5ms(void) {
-  SG_handleJoystick();
-}
-
-/***************************************************************************************************
- *                                     ISR
- ***************************************************************************************************/
-void IRAM_ATTR ISR_SW1() {
-  unsigned long now = millis();
-  if (now - lastISR_SW1 >= DEBOUNCE_MS) {
-    lastISR_SW1 = now;
-    B1Pressed = true;
-  }
-}
-
-void IRAM_ATTR ISR_SW2() {
-  unsigned long now = millis();
-  if (now - lastISR_SW2 >= DEBOUNCE_MS) {
-    lastISR_SW2 = now;
-    B2Pressed = true;
-  }
-}
-
-void IRAM_ATTR ISR_SW3() {
-  unsigned long now = millis();
-  if (now - lastISR_SW3 >= DEBOUNCE_MS) {
-    lastISR_SW3 = now;
-    B3Pressed = true;
-  }
-}
-
-void IRAM_ATTR ISR_SW4() {
-  unsigned long now = millis();
-  if (now - lastISR_SW4 >= DEBOUNCE_MS) {
-    lastISR_SW4 = now;
-    B4Pressed = true;
-  }
-}
-
-/***************************************************************************************************
- *                                     BUTTON HANDLERS
- ***************************************************************************************************/
-static void buttonReactSw1(void) {
-  if (secretGameState == SG_SHOP) {
-    if (totalScore >= 30) {
-      totalScore -= 30;
-      hintInventory++;
-      SG_drawShop();
-      BLE_sendStatus();
-    }
-    return;
-  }
- if (secretGameState == SG_PICK_GUESS && hintInventory > 0 && !hintUsedThisRound) {
-  hintInventory--;
-  hintUsedThisRound = true;
-
-  uint8_t pos = random(0, 3);
-  uint8_t val = secretCode[pos];
-
-  SG_showHintBlink(pos, val);
-
-  Serial.print("Hint P");
-  Serial.print((unsigned)(pos + 1));
-  Serial.print("=");
-  Serial.println((unsigned)val);
-  BLE_sendStatus();
-}
-}
-
-static void buttonReactSw2(void) {
-  // reset round
-  SG_resetRound();
-}
-
-static void buttonReactSw3(void) {
-  // 1) Lock secret -> guess phase
-  if (secretGameState == SG_PICK_SECRET) {
-    secretLocked = true;
-    secretGameState = SG_PICK_GUESS;
-    selectedIdx = 0;
-    SG_drawPickGuess();
-    return;
-  }
-
-  // 2) Submit guess
-  if (secretGameState == SG_PICK_GUESS) {
-    SG_applyGuess();
-    return;
-  }
-
-  // 3) From intermediate result screen:
-  //    - if game ended (win/lose) -> SHOP
-  //    - else continue guessing
-  if (secretGameState == SG_SHOW_RESULT) {
-    if (lastExact == 3 || attemptCount >= maxAttempts) {
-      secretGameState = SG_SHOP;
-      SG_drawShop();
-    } else {
-      secretGameState = SG_PICK_GUESS;
-      SG_drawPickGuess();
-    }
-    return;
-  }
-
-  // 4) Win screen -> SHOP
-  if (secretGameState == SG_WIN) {
-    secretGameState = SG_SHOP;
-    SG_drawShop();
-    return;
-  }
-
-  // 5) Shop -> start new round (score stays)
-  if (secretGameState == SG_SHOP) {
-    SG_resetRound();
-    return;
-  }
-}
-
-static void buttonReactSw4(void) {
-  // SHOP: buy jam
-  if (secretGameState == SG_SHOP) {
-    if (totalScore >= 50) {
-      totalScore -= 50;
-      jamInventory++;
-      SG_drawShop();
-      BLE_sendStatus();
-    }
-    return;
-  }
-
-  // IN-GAME: use jam (only in guess menu)
-  if (secretGameState == SG_PICK_GUESS && jamInventory > 0 && !jamUsedThisRound) {
-    jamInventory--;
-    jamUsedThisRound = true;
-    jamArmed = true;
-
-    lcd.fillRect(0, 84, 128, 12, ST77XX_BLACK);
-    LcdUtils_setCursor(0, 84);
-    LcdUtils_printLine("JAM armed", RED, FONT_DEFAULT);
-
-    Serial.println("JAM armed");
-
-    BLE_sendStatus();
-  }
-}
-static void processButtons(void) {
-  bool Button1, Button2, Button3, Button4;
-
-  noInterrupts();
-  Button1 = B1Pressed; B1Pressed = false;
-  Button2 = B2Pressed; B2Pressed = false;
-  Button3 = B3Pressed; B3Pressed = false;
-  Button4 = B4Pressed; B4Pressed = false;
-  interrupts();
-
-  if (Button1) buttonReactSw1();
-  if (Button2) buttonReactSw2();
-  if (Button3) buttonReactSw3();
-  if (Button4) buttonReactSw4();
-}
-
-static void playWinMelody(void) {
-  tone(BUZZER_PIN, 523, 80);
-  delay(100);
-  tone(BUZZER_PIN, 659, 80);
-  delay(100);
-  tone(BUZZER_PIN, 784, 80);
-  delay(100);
-  tone(BUZZER_PIN, 1047, 80);
-  delay(100);
-  tone(BUZZER_PIN, 1318, 80);
-  delay(100);
-  tone(BUZZER_PIN, 1568, 400);
-  delay(450);
-  noTone(BUZZER_PIN);
-}
-
-
-static void playLoseMelody(void) {
-  tone(BUZZER_PIN, 392, 200);  
-  delay(250);
-  tone(BUZZER_PIN, 349, 200);  
-  delay(250);
-  tone(BUZZER_PIN, 311, 250);  
-  delay(300);
-  tone(BUZZER_PIN, 261, 500);  
-  delay(550);
-  noTone(BUZZER_PIN);
-}
-
-/***************************************************************************************************
- *                                     SECRET GAME
- ***************************************************************************************************/
-static void SG_enter(void) {
-  SG_resetRound();
-}
-
-static void SG_resetRound(void) {
-  secretCode[0] = 0; secretCode[1] = 0; secretCode[2] = 0;
-  guessCode[0] = 0;  guessCode[1] = 0;  guessCode[2] = 0;
-  jamResultActive = false;
-  jamDirections[0] = jamDirections[1] = jamDirections[2] = 0;
-  selectedIdx = 0;
-  attemptCount = 0;
-  lastExact = 0;
-  lastPartial = 0;
-  secretLocked = false;
-  bestExactThisRound = 0;
-  secretGameState = SG_PICK_SECRET;
-  prevExactForCombo = 0;
-  hintUsedThisRound = false;
-  jamUsedThisRound = false;
-  jamArmed = false;
-  SG_updatePcaLeds(0);
-  SG_drawPickSecret();
-  BLE_sendStatus();
-}
-
-static void SG_awardPointsAfterGuess(uint8_t exactNow) {
-   uint8_t gained = 0;
-
-  // points for the progress
-  if (exactNow > bestExactThisRound) {
-    gained = exactNow - bestExactThisRound;   
-    totalScore += (long)gained * 5L;
-
-    // combo if the previous guess has progress
-    if (prevExactForCombo > 0) {
-      totalScore += 10;
-    }
-
-    prevExactForCombo = 1; 
-    bestExactThisRound = exactNow;
-  } else {
-    // no progress => no points, reset combo
-    prevExactForCombo = 0;
-  }
-}
-
-static void SG_drawPickSecret(void) {
-  lcd.fillScreen(ST77XX_BLACK);
-  LcdUtils_setCursor(0, 0);
-  LcdUtils_printLine("SECRET CODE", CYAN, FONT_DEFAULT);
-  LcdUtils_setCursor(0, 12);
-  LcdUtils_printLine("Set 3 digits", WHITE, FONT_DEFAULT);
-  LcdUtils_setCursor(0, 24);
-  char b[24];
-  sprintf(b, "%d %d %d", secretCode[0], secretCode[1], secretCode[2]);
-  LcdUtils_printLine(b, YELLOW, FONT_FREE_MONO_9PT);
-
-  // selector marker
-  const int xCenters[3] = {6, 26, 48};
-  int cx = xCenters[selectedIdx];
-  lcd.fillRect(0, 46, 128, 10, ST77XX_BLACK);
-  lcd.fillTriangle(cx - 5, 54, cx + 5, 54, cx, 47, GREEN);
-
-  LcdUtils_setCursor(0, 58);
-  LcdUtils_printLine("Joy L/R digit", WHITE, FONT_DEFAULT);
-  LcdUtils_setCursor(0, 75);
-  LcdUtils_printLine("Joy U/D select", WHITE, FONT_DEFAULT);
-  LcdUtils_setCursor(0, 84);
-  LcdUtils_printLine("SW3=lock", GREEN, FONT_DEFAULT);
-}
-
-static void SG_drawPickGuess(void) {
-  lcd.fillScreen(ST77XX_BLACK);
-  LcdUtils_setCursor(0, 0);
-  LcdUtils_printLine("GUESS CODE", CYAN, FONT_DEFAULT);
-
-  char sline[24];
-  sprintf(sline, "Score:%ld", totalScore);
-  LcdUtils_setCursor(0, 57);
-  LcdUtils_printLine(sline, WHITE, FONT_DEFAULT);
-
-  char t[20];
-  sprintf(t, "Try %u/%u", (unsigned)(attemptCount + 1), (unsigned)maxAttempts);
-  LcdUtils_setCursor(0, 12);
-  LcdUtils_printLine(t, WHITE, FONT_DEFAULT);
-
-  LcdUtils_setCursor(0, 24);
-  char b[24];
-  sprintf(b, "%d %d %d", guessCode[0], guessCode[1], guessCode[2]);
-  LcdUtils_printLine(b, YELLOW, FONT_FREE_MONO_9PT);
-
-  const int xCenters[3] = {6, 26, 48};
-  int cx = xCenters[selectedIdx];
-  lcd.fillRect(0, 46, 128, 10, ST77XX_BLACK);
-  lcd.fillTriangle(cx - 5, 54, cx + 5, 54, cx, 47, GREEN);
-
-  LcdUtils_setCursor(0, 60);
-  LcdUtils_printLine("SW3=submit", GREEN, FONT_DEFAULT);
-  LcdUtils_setCursor(0, 80);
-  LcdUtils_printLine("SW2=reset", RED, FONT_DEFAULT);
-}
-
-static void SG_drawResult(void) {
-  lcd.fillScreen(ST77XX_BLACK);
-  LcdUtils_setCursor(0, 0);
-  LcdUtils_printLine("RESULT", CYAN, FONT_DEFAULT);
-
-  char b1[20], b2[20];
-  sprintf(b1, "Exact: %u",   (unsigned)lastExact);
-  sprintf(b2, "Partial: %u", (unsigned)lastPartial);
-
-  LcdUtils_setCursor(0, 16);
-  LcdUtils_printLine(b1, GREEN,  FONT_DEFAULT);
-  LcdUtils_setCursor(0, 28);
-  LcdUtils_printLine(b2, YELLOW, FONT_DEFAULT);
-
-  char tries[20];
-  sprintf(tries, "Used: %u/%u", (unsigned)attemptCount, (unsigned)maxAttempts);
-  LcdUtils_setCursor(0, 40);
-  LcdUtils_printLine(tries, WHITE, FONT_DEFAULT);
-
-  char scoreLine[24];
-  sprintf(scoreLine, "Score: %ld", totalScore);
-  LcdUtils_setCursor(0, 52);
-  LcdUtils_printLine(scoreLine, CYAN, FONT_DEFAULT);
-
-  if (jamResultActive) {
-    char radar[20];
-    sprintf(radar, "Radar:%c %c %c",
-      jamDirections[0] ==  0 ? '=' : (jamDirections[0] > 0 ? '^' : 'v'),
-      jamDirections[1] ==  0 ? '=' : (jamDirections[1] > 0 ? '^' : 'v'),
-      jamDirections[2] ==  0 ? '=' : (jamDirections[2] > 0 ? '^' : 'v'));
-    LcdUtils_setCursor(0, 63);
-    LcdUtils_printLine(radar, MAGENTA, FONT_DEFAULT);
-  }
-
-  if (lastExact == 3) {
-    LcdUtils_setCursor(0, 75);
-    LcdUtils_printLine("Code guessed!", GREEN, FONT_DEFAULT);
-    LcdUtils_setCursor(0, 87);
-    LcdUtils_printLine("SW3 -> SHOP",   WHITE, FONT_DEFAULT);
-
-  } else if (attemptCount >= maxAttempts) {
-    char s[24];
-    sprintf(s, "Secret:%d%d%d", secretCode[0], secretCode[1], secretCode[2]);
-    LcdUtils_setCursor(0, 75);
-    LcdUtils_printLine("No tries left", RED,   FONT_DEFAULT);
-    LcdUtils_setCursor(0, 87);
-    LcdUtils_printLine(s,              WHITE,  FONT_DEFAULT);
-    playLoseMelody();
-
-  } else {
-    LcdUtils_setCursor(0, 87);
-    LcdUtils_printLine("SW3 continue", WHITE, FONT_DEFAULT);
-  }
-}
-
-
-static void SG_drawWin(void) {
-  lcd.fillScreen(ST77XX_BLACK);
-  LcdUtils_setCursor(0, 26);
-  LcdUtils_printLine("YOU WIN!", GREEN, FONT_FREE_MONO_9PT);
-  LcdUtils_setCursor(0, 70);
-  LcdUtils_printLine("SW3 -> SHOP", WHITE, FONT_DEFAULT);
-  playWinMelody(); 
-}
-
-static void SG_drawShop(void) {
-  lcd.fillScreen(ST77XX_BLACK);
-
-  LcdUtils_setCursor(0, 0);
-  LcdUtils_printLine("SHOP", CYAN, FONT_DEFAULT);
-
-  char sbuf[24];
-  sprintf(sbuf, "Score: %ld", totalScore);
-  LcdUtils_setCursor(0, 12);
-  LcdUtils_printLine(sbuf, YELLOW, FONT_DEFAULT);
-
-  LcdUtils_setCursor(0, 30);
-  LcdUtils_printLine("[SW1] Hint 30p", WHITE, FONT_DEFAULT);
-
-  LcdUtils_setCursor(0, 44);
-  LcdUtils_printLine("[SW4] Jam 50p", WHITE, FONT_DEFAULT);
-
-  char inv[28];
-  sprintf(inv, "Inv H:%u J:%u", hintInventory, jamInventory);
-  LcdUtils_setCursor(0, 60);
-  LcdUtils_printLine(inv, GREEN, FONT_DEFAULT);
-
-  LcdUtils_setCursor(0, 84);
-  LcdUtils_printLine("SW3 Continue", CYAN, FONT_DEFAULT);
-}
-
-static void SG_showHintBlink(uint8_t pos, uint8_t val) {
-  uint8_t oldVal = guessCode[pos];   
-  const int blinkCount = 4;
-
-  for (int i = 0; i < 3; i++) {
-    // ON
-    guessCode[pos] = val;
-    SG_drawPickGuess();
-    delay(180);
-
-    // OFF
-    guessCode[pos] = oldVal;
-    SG_drawPickGuess();
-    delay(120);
-  }
-
- guessCode[pos]=val;
- SG_drawPickGuess();
-}
-
-static void SG_handleJoystick(void) {
-  if (!(secretGameState == SG_PICK_SECRET || secretGameState == SG_PICK_GUESS)) return;
-
-  // LEFT/RIGHT axis
-  int rawLR = analogRead(JOY_VRY_PIN);
-  // UP/DOWN axis
-  int rawUD = analogRead(JOY_VRX_PIN);
-
-  if (millis() - lastJoyMoveMs < 160) return;
-
-  const int TH = 650;
-
-  // LEFT / RIGHT => move between digit positions
-  if (rawLR > joyCenterX + TH) {
-    selectedIdx = (selectedIdx == 0) ? 2 : (selectedIdx - 1);
-    if (secretGameState == SG_PICK_SECRET) SG_drawPickSecret();
-    else SG_drawPickGuess();
-    lastJoyMoveMs = millis();
-    return;
-  }
-
-  if (rawLR < joyCenterX - TH) {
-    selectedIdx = (selectedIdx + 1) % 3;
-    if (secretGameState == SG_PICK_SECRET) SG_drawPickSecret();
-    else SG_drawPickGuess();
-    lastJoyMoveMs = millis();
-    return;
-  }
-
-  // UP / DOWN => change current digit value
-  if (rawUD > joyCenterY + TH) {
-    if (secretGameState == SG_PICK_SECRET) {
-      secretCode[selectedIdx] = (secretCode[selectedIdx] == 0) ? 9 : (secretCode[selectedIdx] - 1);
-      SG_drawPickSecret();
-    } else {
-      guessCode[selectedIdx] = (guessCode[selectedIdx] == 0) ? 9 : (guessCode[selectedIdx] - 1);
-      SG_drawPickGuess();
-    }
-    lastJoyMoveMs = millis();
-    return;
-  }
-
-  if (rawUD < joyCenterY - TH) {
-    if (secretGameState == SG_PICK_SECRET) {
-      secretCode[selectedIdx] = (secretCode[selectedIdx] + 1) % 10;
-      SG_drawPickSecret();
-    } else {
-      guessCode[selectedIdx] = (guessCode[selectedIdx] + 1) % 10;
-      SG_drawPickGuess();
-    }
-    lastJoyMoveMs = millis();
-    return;
-  }
-}
-
-static void SG_applyGuess(void) {
-  if (!secretLocked) return;
-  if (secretGameState != SG_PICK_GUESS) return;
-
-  jamResultActive = false;   // clear previous radar before new guess
-
-  attemptCount++;
-  SG_evalGuess(guessCode, secretCode, &lastExact, &lastPartial);
-
-  // JAM
-  if (jamArmed) {
-    jamResultActive = true;
-    for (int i = 0; i < 3; i++) {
-      if (guessCode[i] == secretCode[i]) {
-        jamDirections[i] = 0;                          // exact: show '='
-      } else if (secretCode[i] > guessCode[i]) {
-        jamDirections[i] =  1;                         // secret is higher: show '^'
-      } else {
-        jamDirections[i] = -1;                         // secret is lower: show 'v'
-      }
-    }
-    jamArmed = false;
-  }
-
-  SG_awardPointsAfterGuess(lastExact);
-  SG_updatePcaLeds(lastExact);
-
-  if (lastExact == 3) {
-    totalScore += 25;
-    secretGameState = SG_WIN;
-    SG_drawWin();
-  } else {
-    secretGameState = SG_SHOW_RESULT;
-    SG_drawResult();
-  }
-  BLE_sendStatus();
-}
-
-static void SG_evalGuess(uint8_t guess[3], uint8_t secret[3], uint8_t* exact, uint8_t* partial) {
-  *exact = 0;
-  *partial = 0;
-
-  bool secretUsed[3] = {false, false, false};
-  bool guessUsed[3]  = {false, false, false};
-
-  for (int i = 0; i < 3; i++) {
-    if (guess[i] == secret[i]) {
-      (*exact)++;
-      secretUsed[i] = true;
-      guessUsed[i] = true;
-    }
-  }
-
-  for (int i = 0; i < 3; i++) {
-    if (guessUsed[i]) continue;
-    for (int j = 0; j < 3; j++) {
-      if (secretUsed[j]) continue;
-      if (guess[i] == secret[j]) {
-        (*partial)++;
-        secretUsed[j] = true;
-        guessUsed[i] = true;
-        break;
-      }
-    }
-  }
-}
-
-static void SG_updatePcaLeds(uint8_t value) {
-  if (value > 8) value = 8;
-  for (uint8_t i = 0; i < 8; i++) {
-    if (i < value) PCA_enablePin(PCA_ADDRESS, i);
-    else PCA_disablePin(PCA_ADDRESS, i);
-  }
-}
-
-/***************************************************************************************************
- *                                     INIT FUNCTIONS
- ***************************************************************************************************/
-static void BLE_init(void) {
-  BLEDevice::init(BLE_DEVICE_NAME);
-  pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new BleServerCallbacks());
-
-  BLEService* pService = pServer->createService(BLE_SERVICE_UUID);
-
-  pTxCharacteristic = pService->createCharacteristic(
-    BLE_CHARACTERISTIC_UUID_TX,
-    BLECharacteristic::PROPERTY_NOTIFY
-  );
-  pTxCharacteristic->addDescriptor(new BLE2902());
-
-  BLECharacteristic* pRxCharacteristic = pService->createCharacteristic(
-    BLE_CHARACTERISTIC_UUID_RX,
-    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
-  );
-  pRxCharacteristic->setCallbacks(new BleRxCallbacks());
-
-  pService->start();
-
-  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(BLE_SERVICE_UUID);
-  pAdvertising->setScanResponse(true);
-  BLEDevice::startAdvertising();
-
-  Serial.println("BLE advertising: IFM-SecretGame");
-}
-
-static void BLE_sendLine(const String& s) {
-  if (!bleDeviceConnected || pTxCharacteristic == nullptr) return;
-  String msg = s + "\n";
-  pTxCharacteristic->setValue((uint8_t*)msg.c_str(), msg.length());
-  pTxCharacteristic->notify();
-}
-
-static void BLE_sendStatus(void) {
-  String st;
-  st.reserve(120);
-  st += "STATE:" + String((int)secretGameState);
-  st += ",SCORE:" + String(totalScore);
-  st += ",TRY:" + String((int)attemptCount) + "/" + String((int)maxAttempts);
-  st += ",EX:" + String((int)lastExact);
-  st += ",PA:" + String((int)lastPartial);
-  st += ",H:" + String((int)hintInventory);
-  st += ",J:" + String((int)jamInventory);
-  BLE_sendLine(st);
-}
-
-static void BLE_handleCommand(const String& cmdIn) {
-  String cmd = cmdIn;
-  cmd.trim();
-  cmd.toUpperCase();
-
-  if (cmd == "STATUS") {
-    BLE_sendStatus();
-    return;
-  }
-  if (cmd == "RESET") {
-    SG_resetRound();
-    BLE_sendLine("OK:RESET");
-    BLE_sendStatus();
-    return;
-  }
-  if (cmd == "HINT") {
-    buttonReactSw1();   
-    BLE_sendLine("OK:HINT");
-    BLE_sendStatus();
-    return;
-  }
-  if (cmd == "JAM") {
-    buttonReactSw4();   
-    BLE_sendLine("OK:JAM");
-    BLE_sendStatus();
-    return;
-  }
-  if (cmd == "SUBMIT") {
-    buttonReactSw3();   
-    BLE_sendLine("OK:SUBMIT");
-    BLE_sendStatus();
-    return;
-  }
-
-  BLE_sendLine("ERR:UNKNOWN_CMD");
-}
-
-static void BLE_poll(void) {
-  if (bleCommandReady) {
-    bleCommandReady = false;
-    BLE_handleCommand(bleRxCommand);
-  }
-
-  // reconnect advertising after disconnect
-  if (!bleDeviceConnected && bleOldDeviceConnected) {
-    delay(100);
-    pServer->startAdvertising();
-    bleOldDeviceConnected = bleDeviceConnected;
-  }
-  if (bleDeviceConnected && !bleOldDeviceConnected) {
-    bleOldDeviceConnected = bleDeviceConnected;
-    BLE_sendLine("HELLO:IFM-SecretGame");
-    BLE_sendStatus();
-  }
-}
-
-static bool SERIAL_init(void) {
-  Serial.begin(115200);
-  unsigned long startWait = millis();
-  while (!Serial && (millis() - startWait < 3000)) delay(10);
-  delay(100);
-  Serial.print("ifm Labz 2026\n");
-  Serial.print("Board initialization...\n");
-  return true;
-}
-
-static bool LCD_init(void) {
-  pinMode(LCD_CS_PIN, OUTPUT);
-  digitalWrite(LCD_CS_PIN, HIGH);
-
-  pinMode(LCD_BCKL_PIN, OUTPUT);
-  digitalWrite(LCD_BCKL_PIN, HIGH);
-
-  pinMode(LCD_RST_PIN, OUTPUT);
-  digitalWrite(LCD_RST_PIN, HIGH);
-  delay(100);
-  digitalWrite(LCD_RST_PIN, LOW);
-  delay(100);
-  digitalWrite(LCD_RST_PIN, HIGH);
-  delay(200);
-
   SPI.begin();
   lcd.initR(INITR_TDO128x96);
-  lcd.setSPISpeed(16000000UL);
   lcd.setRotation(0);
   lcd.fillScreen(ST77XX_BLACK);
-  lcd.setTextWrap(false);
   lcd.setTextSize(1);
+  LcdUtils_init(&lcd);
 
-  return true;
+  // Init Joystick center
+  long sumX = 0, sumY = 0;
+  for (int i = 0; i < 16; i++) { sumX += analogRead(JOY_VRY_PIN); sumY += analogRead(JOY_VRX_PIN); delay(5); }
+  joyCenterX = sumX / 16; joyCenterY = sumY / 16;
 
+  // Wi-Fi Connection
+  LcdUtils_setCursor(0, 10);
+  LcdUtils_printLine("WiFi Connecting...", YELLOW, FONT_DEFAULT);
+  WiFi.begin(ssid, password);
+  WiFi.setSleep(false);
+
+  int attempts = 0;
+while (WiFi.status() != WL_CONNECTED && attempts < 40) { 
+    delay(500);
+    Serial.print("Status: ");
+    Serial.println(WiFi.status()); // 6 = WRONG_PASSWORD, 1 = NO_SSID
+    attempts++;
+}
+  
+ if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("Wi-Fi OK. Connecting to Nexus Server...");
+    if (client.connect(serverIP, serverPort)) {
+      serverMessage = "NEXUS LINK OK";
+      sendToServer("CONNECT");
+      playBeep();
+    } else {
+      serverMessage = "SERVER OFFLINE";
+    }
+  } else {
+    serverMessage = "WIFI ERROR";
+  }
+
+  drawTerminal();
+}
+
+void loop() {
+  // process buttons
+  noInterrupts();
+  bool btn1 = B1Pressed; B1Pressed = false;
+  bool btn2 = B2Pressed; B2Pressed = false;
+  bool btn3 = B3Pressed; B3Pressed = false;
+  bool btn4 = B4Pressed; B4Pressed = false;
+  interrupts();
+
+  if(btn1) sendToServer("BOOST:TRACER");
+  if(btn2) sendToServer("BOOST:COOLDOWN");
+  if(btn4) sendToServer("BOOST:BYPASS");
+  
+  if(btn3) { // SUBMIT FREQUENCY
+    int currentFreq = (freqDigits[0]*100) + (freqDigits[1]*10) + freqDigits[2];
+    sendToServer("SUBMIT:" + String(currentFreq));
+    serverMessage = "SENDING...";
+    drawTerminal();
+    playBeep();
+  }
+
+  // Process Joystick
+  handleJoystick();
+
+  // Process Network
+  if (client.connected() && client.available()) {
+    handleServerData();
+  }  else if (!client.connected()) {
+    unsigned long now = millis();
+    if (now - lastReconnectAttempt > 3000) {
+        lastReconnectAttempt = now;
+        client.connect(serverIP, serverPort);
+    }
+  }
+}
+
+void handleJoystick() {
+  int rawLR = analogRead(JOY_VRY_PIN);
+  int rawUD = analogRead(JOY_VRX_PIN);
+  if (millis() - lastJoyMoveMs < 160) return;
+  const int TH = 650;
+
+  bool moved = false;
+  if (rawLR > joyCenterX + TH) { selectedIdx = (selectedIdx == 0) ? 2 : (selectedIdx - 1); moved = true; }
+  else if (rawLR < joyCenterX - TH) { selectedIdx = (selectedIdx + 1) % 3; moved = true; }
+  
+  if (rawUD > joyCenterY + TH) { freqDigits[selectedIdx] = (freqDigits[selectedIdx] == 0) ? 9 : (freqDigits[selectedIdx] - 1); moved = true; }
+  else if (rawUD < joyCenterY - TH) { freqDigits[selectedIdx] = (freqDigits[selectedIdx] + 1) % 10; moved = true; }
+
+  if(moved) {
+    lastJoyMoveMs = millis();
+    drawTerminal();
+  }
+}
+
+void sendToServer(String msg) {
+  if (client.connected()) {
+    client.println("ALPHA|" + msg); // "BETA|" for the other console
+    Serial.println("Sent: " + msg);
+  }
+}
+
+void handleServerData() {
+  String response = client.readStringUntil('\n');
+  response.trim();
+  if(response.length() > 0) {
+    
+    if(response.startsWith("DRIFT:")) {
+      int driftVal = response.substring(6).toInt(); // ex: DRIFT:-10
+      int currentFreq = (freqDigits[0]*100) + (freqDigits[1]*10) + freqDigits[2];
+      currentFreq += driftVal;
+      if(currentFreq < 0) currentFreq = 0;
+      if(currentFreq > 999) currentFreq = 999;
+      
+      freqDigits[0] = (currentFreq / 100) % 10;
+      freqDigits[1] = (currentFreq / 10) % 10;
+      freqDigits[2] = currentFreq % 10;
+      
+      serverMessage = "SYS DRIFT ALERT!";
+      playBeep();
+    } else {
+      serverMessage = response; // ex: "TOO LOW", "CORE UNLOCKED"
+    }
+    drawTerminal();
+  }
+}
+
+void drawTerminal() {
+  lcd.fillScreen(ST77XX_BLACK);
+  
+  LcdUtils_setCursor(0, 5);
+  LcdUtils_printLine("NEXUS TERMINAL", CYAN, FONT_DEFAULT);
+  
+  LcdUtils_setCursor(0, 20);
+  LcdUtils_printLine("FREQUENCY TX:", WHITE, FONT_DEFAULT);
+  
+  // DIGITS DRAW
+  LcdUtils_setCursor(0, 35);
+  char b[24];
+  sprintf(b, "%d %d %d Hz", freqDigits[0], freqDigits[1], freqDigits[2]);
+  LcdUtils_printLine(b, YELLOW, FONT_FREE_MONO_9PT);
+
+  // MARKER JOYSTICK
+  const int xCenters[3] = {6, 26, 48};
+  int cx = xCenters[selectedIdx];
+  lcd.fillTriangle(cx - 5, 60, cx + 5, 60, cx, 53, GREEN);
+
+  // Server Message Box
+  lcd.drawRect(0, 70, 128, 25, ST77XX_GRAY);
+  LcdUtils_setCursor(3, 78);
+  LcdUtils_printLine(serverMessage.c_str(), RED, FONT_DEFAULT);
+}
+
+void playBeep() {
+  tone(BUZZER_PIN, 1000, 100);
+  delay(100);
+  noTone(BUZZER_PIN);
 }
