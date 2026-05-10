@@ -32,6 +32,7 @@ Adafruit_ST7735 lcd = Adafruit_ST7735(LCD_CS_PIN, LCD_DC_PIN, LCD_RST_PIN);
 uint8_t freqDigits[3] = {0, 0, 0};
 uint8_t selectedIdx = 0;
 String serverMessage = "CONNECTING...";
+bool isConnectedToHost = false;
 unsigned long lastJoyMoveMs = 0;
 int joyCenterX = 2048, joyCenterY = 2048;
 
@@ -44,6 +45,7 @@ unsigned long lastReconnectAttempt = 0;
 
 // PROTOTYPES
 void drawTerminal();
+void drawWaitingScreen();
 void sendToServer(String msg);
 void handleServerData();
 void handleJoystick();
@@ -59,7 +61,7 @@ void setup() {
   Serial.begin(115200);
 
   int n = WiFi.scanNetworks();
-Serial.println("Retele gasite:");
+Serial.println("Available networks:");
 for (int i = 0; i < n; i++) {
     Serial.print(WiFi.SSID(i));
     Serial.print(" (");
@@ -102,50 +104,73 @@ while (WiFi.status() != WL_CONNECTED && attempts < 40) {
     attempts++;
 }
   
- if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("Wi-Fi OK. Connecting to Nexus Server...");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("Wi-Fi OK. Looking for Server...");
     if (client.connect(serverIP, serverPort)) {
+      isConnectedToHost = true;
       serverMessage = "NEXUS LINK OK";
       sendToServer("CONNECT");
       playBeep();
+      drawTerminal(); 
     } else {
-      serverMessage = "SERVER OFFLINE";
+      isConnectedToHost = false;
+      drawWaitingScreen(); 
     }
   } else {
-    serverMessage = "WIFI ERROR";
+    isConnectedToHost = false;
+    drawWaitingScreen(); 
   }
-
-  drawTerminal();
 }
 
-void loop() {
-  // process buttons
-  noInterrupts();
-  bool btn1 = B1Pressed; B1Pressed = false;
-  bool btn2 = B2Pressed; B2Pressed = false;
-  bool btn3 = B3Pressed; B3Pressed = false;
-  bool btn4 = B4Pressed; B4Pressed = false;
-  interrupts();
 
-  if(btn1) sendToServer("BOOST:TRACER");
-  if(btn2) sendToServer("BOOST:COOLDOWN");
-  if(btn4) sendToServer("BOOST:BYPASS");
-  
-  if(btn3) { // SUBMIT FREQUENCY
-    int currentFreq = (freqDigits[0]*100) + (freqDigits[1]*10) + freqDigits[2];
-    sendToServer("SUBMIT:" + String(currentFreq));
-    serverMessage = "SENDING...";
-    drawTerminal();
-    playBeep();
+void loop() {
+  // try to reconnect
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFi.reconnect();
+    delay(100);
+    return;
   }
 
-  // Process Joystick
-  handleJoystick();
+  // State logic - loby vs game
+  if (client.connected()) {
+    if (!isConnectedToHost) {
+      isConnectedToHost = true;
+      serverMessage = "LINK ESTABLISHED";
+      drawTerminal(); 
+      playBeep();
+    }
 
-  // Process Network
-  if (client.connected() && client.available()) {
-    handleServerData();
-  }  else if (!client.connected()) {
+    noInterrupts();
+    bool btn1 = B1Pressed; B1Pressed = false;
+    bool btn2 = B2Pressed; B2Pressed = false;
+    bool btn3 = B3Pressed; B3Pressed = false;
+    bool btn4 = B4Pressed; B4Pressed = false;
+    interrupts();
+
+    if(btn1) sendToServer("BOOST:TRACER");
+    if(btn2) sendToServer("BOOST:COOLDOWN");
+    if(btn4) sendToServer("BOOST:BYPASS");
+    
+    if(btn3) { 
+      int currentFreq = (freqDigits[0]*100) + (freqDigits[1]*10) + freqDigits[2];
+      sendToServer("SUBMIT:" + String(currentFreq));
+      serverMessage = "SENDING...";
+      drawTerminal();
+      playBeep();
+    }
+
+    handleJoystick(); 
+
+    if (client.available()) {
+      handleServerData();
+    }
+    
+  } else {
+    if (isConnectedToHost || millis() < 2000) { 
+      isConnectedToHost = false;
+      drawWaitingScreen(); 
+    }
+
     unsigned long now = millis();
     if (now - lastReconnectAttempt > 3000) {
         lastReconnectAttempt = now;
@@ -229,6 +254,19 @@ void drawTerminal() {
   lcd.drawRect(0, 70, 128, 25, ST77XX_GRAY);
   LcdUtils_setCursor(3, 78);
   LcdUtils_printLine(serverMessage.c_str(), RED, FONT_DEFAULT);
+}
+
+void drawWaitingScreen() {
+  lcd.fillScreen(ST77XX_BLACK);
+  
+  LcdUtils_setCursor(0, 30);
+  LcdUtils_printLine("NEXUS OFFLINE", RED, FONT_DEFAULT);
+  
+  LcdUtils_setCursor(0, 50);
+  LcdUtils_printLine("Waiting for", WHITE, FONT_DEFAULT);
+  
+  LcdUtils_setCursor(0, 65);
+  LcdUtils_printLine("HOST SERVER...", YELLOW, FONT_DEFAULT);
 }
 
 void playBeep() {
