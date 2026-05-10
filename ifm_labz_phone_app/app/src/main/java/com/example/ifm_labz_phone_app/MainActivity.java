@@ -24,6 +24,15 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
 
+        Button btnStartGame = findViewById(R.id.button7);
+        btnStartGame.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(MainActivity.this, StoryActivity.class);
+                startActivity(intent);
+            }
+        });
+
         Button btnHowToPlay = findViewById(R.id.btnHowToPlay);
 
         btnHowToPlay.setOnClickListener(new View.OnClickListener() {

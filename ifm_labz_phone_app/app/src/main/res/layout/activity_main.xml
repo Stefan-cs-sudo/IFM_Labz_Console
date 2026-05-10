@@ -5,8 +5,7 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#00101D"
-    android:backgroundTint="#0F0F12"
+    android:background="@drawable/game_background"
     android:textAlignment="center"
     tools:context=".MainActivity">
 
@@ -43,7 +42,7 @@
         android:layout_width="345dp"
         android:layout_height="81dp"
         android:fontFamily="casual"
-        android:text="NEXUS: THE CODEBREAKER"
+        android:text="NEXUS: DECRYPTION PROTOCOL"
         android:textAlignment="center"
         android:textAppearance="@style/TextAppearance.AppCompat.Large"
         android:textColor="#FF7A00"
