@@ -37,6 +37,7 @@ public class AboutUsActivity extends AppCompatActivity {
                 @Override
                 public void onClick(View v) {
                     finish();
+                    overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
                 }
             });
         }

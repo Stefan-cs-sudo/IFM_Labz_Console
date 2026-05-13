@@ -10,11 +10,11 @@
     tools:context=".MainActivity">
 
     <Button
-        android:id="@+id/AboutBtn"
+        android:id="@+id/hardBtn"
         android:layout_width="150dp"
         android:layout_height="48dp"
-        android:backgroundTint="#d4b59f"
-        android:text="ABOUT US"
+        android:backgroundTint="#FF7A00"
+        android:text="HARD"
         android:textColorLink="#E2E2E6"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -24,11 +24,11 @@
         app:layout_constraintVertical_bias="0.785" />
 
     <Button
-        android:id="@+id/btnHowToPlay"
+        android:id="@+id/mediumBtn"
         android:layout_width="150dp"
         android:layout_height="wrap_content"
-        android:backgroundTint="#d4b59f"
-        android:text="HOW TO PLAY"
+        android:backgroundTint="#FF7A00"
+        android:text="MEDIUM"
         android:textColorLink="#E2E2E6"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -42,7 +42,7 @@
         android:layout_width="345dp"
         android:layout_height="81dp"
         android:fontFamily="casual"
-        android:text="NEXUS: DECRYPTION PROTOCOL"
+        android:text="SELECT THE DIFFICULTY"
         android:textAlignment="center"
         android:textAppearance="@style/TextAppearance.AppCompat.Large"
         android:textColor="#FF7A00"
@@ -50,17 +50,17 @@
         android:textStyle="bold"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.04"
+        app:layout_constraintHorizontal_bias="0.038"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_bias="0.187" />
 
     <Button
-        android:id="@+id/startBtn"
+        android:id="@+id/easyBtn"
         android:layout_width="150dp"
         android:layout_height="wrap_content"
         android:backgroundTint="#FF7A00"
-        android:text="START GAME"
+        android:text="EASY"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.521"
@@ -78,6 +78,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_bias="0.872"
-        app:srcCompat="@drawable/logo_nexus_game" />
+        app:srcCompat="@drawable/game_difficulty" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

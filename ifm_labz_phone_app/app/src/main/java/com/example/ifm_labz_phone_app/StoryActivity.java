@@ -33,14 +33,19 @@ public class StoryActivity extends AppCompatActivity {
             tvStoryContent.setText(Html.fromHtml(tvStoryContent.getText().toString(), Html.FROM_HTML_MODE_LEGACY));
         }
 
+        final String selectedDifficulty = getIntent().getStringExtra("SELECTED_DIFFICULTY") != null ?
+                getIntent().getStringExtra("SELECTED_DIFFICULTY") : "MEDIUM";
+
         Button btnBeginBypass = findViewById(R.id.btnBeginBypass);
         if (btnBeginBypass != null) {
             btnBeginBypass.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     Intent intent = new Intent(StoryActivity.this, GameActivity.class);
+                    intent.putExtra("SELECTED_DIFFICULTY", selectedDifficulty);
                     startActivity(intent);
                     finish();
+                    overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
                 }
             });
         }

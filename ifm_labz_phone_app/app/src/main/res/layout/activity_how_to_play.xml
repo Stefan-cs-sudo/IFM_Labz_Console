@@ -26,8 +26,8 @@
 
     <TextView
         android:id="@+id/tvHowToSubtitle"
-        android:layout_width="196dp"
-        android:layout_height="21dp"
+        android:layout_width="285dp"
+        android:layout_height="25dp"
         android:layout_marginTop="4dp"
         android:text="How the console and the game works"
         android:textColor="#88888F"
@@ -47,7 +47,7 @@
         android:layout_marginTop="16dp"
         android:layout_marginEnd="24dp"
         android:lineSpacingMultiplier="1.2"
-        android:text="&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;1. CONNECTION:&lt;/b&gt;&lt;/font&gt; Ensure your console is powered on and connected to the same Wi-Fi network as this phone.&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;2. SERVER STATUS:&lt;/b&gt;&lt;/font&gt; Your phone acts as the central host, synchronizing gameplay data in real-time.&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;3. THE MISSION:&lt;/b&gt;&lt;/font&gt; Each player chooses a secret number that the other has to guess. Yoou have 8 atempts to guess the number!&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;4. SHOP:&lt;/b&gt;&lt;/font&gt; Use the point that you gained to buy boosters that will help you!"
+        android:text="&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;1. CONNECTION:&lt;/b&gt;&lt;/font&gt; Ensure your console is powered on and connected to the same Wi-Fi network as this phone.&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;2. SERVER STATUS:&lt;/b&gt;&lt;/font&gt; Your phone acts as the central host, synchronizing gameplay data in real-time.&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;3. THE MISSION:&lt;/b&gt;&lt;/font&gt; You and your teammate have to bypass a security bypass based on 3 digits before the countdown hits zero !&lt;br/&gt;&lt;br/&gt;&lt;font color=\'#FF7A00\'&gt;&lt;b&gt;4. BOOSTERS:&lt;/b&gt;&lt;/font&gt; Use the boosters carefully, the mainframe is fighting back so make sure you choose the right time to make a move!"
         android:textAllCaps="true"
         android:textColor="#E2E2E6"
         android:textSize="15sp"

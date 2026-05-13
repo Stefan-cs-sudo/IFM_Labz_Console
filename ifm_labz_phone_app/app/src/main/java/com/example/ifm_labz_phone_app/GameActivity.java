@@ -24,6 +24,8 @@ public class GameActivity extends AppCompatActivity {
     private ServerSocket serverSocket;
     private Thread serverThread;
 
+    private String gameDifficulty;
+
     private java.util.List<Socket> activeClients = new java.util.ArrayList<>();
 
     @Override
@@ -31,11 +33,17 @@ public class GameActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_game);
 
+        if (getIntent() != null && getIntent().hasExtra("SELECTED_DIFFICULTY")) {
+            gameDifficulty = getIntent().getStringExtra("SELECTED_DIFFICULTY");
+        } else {
+            gameDifficulty = "MEDIUM";
+        }
+
         tvServerIp = findViewById(R.id.tvServerIp);
         tvStatus = findViewById(R.id.tvStatus);
 
         String ip = getLocalIpAddress();
-        tvServerIp.setText("SERVER IP: " + ip + " | PORT: 8080");
+        tvServerIp.setText("SERVER IP: " + ip + " | PORT: 8080 | MODE: "+gameDifficulty);
         updateLog("Waiting for the consoles to connect...");
 
         serverThread = new Thread(new ServerThread());
