@@ -5,9 +5,9 @@
 #include "LcdUtils.h"
 
 // WIFI SETTINGS
-const char* ssid = "POCOX7Pro"; 
-const char* password = "23062005";
-const char* serverIP = "10.130.147.77"; // PHONE IP
+const char* ssid = "DIGI-ZTE"; 
+const char* password = "dxh^Bs4@hsj";
+const char* serverIP = "192.168.1.128"; // PHONE IP
 const int serverPort = 8080;
 
 WiFiClient client;

@@ -16,9 +16,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Ifm_labz_phone_app">
         <activity
-            android:name=".StoryActivity"
+            android:name=".SelectDifficultyActivity"
             android:exported="false"
             android:screenOrientation="landscape"/>
+
+        <activity
+            android:name=".StoryActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
         <activity
             android:name=".GameActivity"
             android:exported="false"

@@ -24,12 +24,13 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
 
-        Button btnStartGame = findViewById(R.id.button7);
+        Button btnStartGame = findViewById(R.id.startBtn);
         btnStartGame.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = new Intent(MainActivity.this, StoryActivity.class);
+                Intent intent = new Intent(MainActivity.this, SelectDifficultyActivity.class);
                 startActivity(intent);
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
             }
         });
 
@@ -40,16 +41,18 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 Intent intent = new Intent(MainActivity.this, HowToPlayActivity.class);
                 startActivity(intent);
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
             }
         });
 
-        Button btnAboutUs = findViewById(R.id.button9);
+        Button btnAboutUs = findViewById(R.id.AboutBtn);
 
         btnAboutUs.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Intent intent = new Intent(MainActivity.this, AboutUsActivity.class);
                 startActivity(intent);
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
             }
         });
     }
