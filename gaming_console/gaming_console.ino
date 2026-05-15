@@ -5,9 +5,9 @@
 #include "LcdUtils.h"
 
 // WIFI SETTINGS
-const char* ssid = "DIGI-ZTE"; 
-const char* password = "dxh^Bs4@hsj";
-const char* serverIP = "192.168.1.128"; // PHONE IP
+const char* ssid = "POCOX7Pro"; 
+const char* password = "23062005";
+const char* serverIP = "10.30.106.70"; // PHONE IP
 const int serverPort = 8080;
 
 WiFiClient client;
@@ -19,12 +19,19 @@ WiFiClient client;
 #define SW4_PIN 9
 #define JOY_VRX_PIN A0
 #define JOY_VRY_PIN A1
-#define JOY_BUTTON A2
+#define JOY_BTN_PIN A2
 #define LCD_CS_PIN 6
 #define LCD_DC_PIN 7
 #define LCD_RST_PIN 5
-#define BUZZER_PIN 8 
+#define BUZZER_PIN 3
 #define PCA_ADDRESS 25
+
+//debouncing - joystick button
+bool lastBtnState = HIGH;
+bool currentBtnState = HIGH;
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50;
+
 
 Adafruit_ST7735 lcd = Adafruit_ST7735(LCD_CS_PIN, LCD_DC_PIN, LCD_RST_PIN);
 
@@ -49,6 +56,9 @@ void drawWaitingScreen();
 void sendToServer(String msg);
 void handleServerData();
 void handleJoystick();
+void handleConfirmation();
+void handleDisconnection();
+void handleConnectionSuccess();
 void playBeep();
 
 // ISR
@@ -72,6 +82,7 @@ for (int i = 0; i < n; i++) {
   pinMode(SW1_PIN, INPUT); pinMode(SW2_PIN, INPUT);
   pinMode(SW3_PIN, INPUT); pinMode(SW4_PIN, INPUT);
   pinMode(BUZZER_PIN, OUTPUT); digitalWrite(BUZZER_PIN, LOW);
+  pinMode(JOY_BTN_PIN, INPUT_PULLUP);
 
   attachInterrupt(digitalPinToInterrupt(SW1_PIN), ISR_SW1, FALLING);
   attachInterrupt(digitalPinToInterrupt(SW2_PIN), ISR_SW2, FALLING);
@@ -110,10 +121,29 @@ while (WiFi.status() != WL_CONNECTED && attempts < 40) {
       isConnectedToHost = true;
       serverMessage = "NEXUS LINK OK";
       sendToServer("CONNECT");
-      playBeep();
+
+      detachInterrupt(digitalPinToInterrupt(SW1_PIN));
+
+      tone(BUZZER_PIN, 1200, 100); 
+      delay(200);
+      tone(BUZZER_PIN, 2300, 150);
+      delay(150);
+
+      attachInterrupt(digitalPinToInterrupt(SW1_PIN), ISR_SW1, FALLING);
+
       drawTerminal(); 
     } else {
       isConnectedToHost = false;
+
+      detachInterrupt(digitalPinToInterrupt(SW1_PIN));
+
+      tone(BUZZER_PIN, 600, 100); 
+      delay(200);
+      tone(BUZZER_PIN, 300, 150);
+      delay(150);
+
+      attachInterrupt(digitalPinToInterrupt(SW1_PIN), ISR_SW1, FALLING);
+
       drawWaitingScreen(); 
     }
   } else {
@@ -124,21 +154,43 @@ while (WiFi.status() != WL_CONNECTED && attempts < 40) {
 
 
 void loop() {
-  // try to reconnect
+
+  // check wifi
   if (WiFi.status() != WL_CONNECTED) {
+    if (isConnectedToHost) {
+      handleDisconnection(); 
+    }
+    Serial.println("WiFi Lost. Reconnecting...");
     WiFi.reconnect();
-    delay(100);
+    delay(500);
     return;
   }
 
-  // State logic - loby vs game
-  if (client.connected()) {
-    if (!isConnectedToHost) {
-      isConnectedToHost = true;
-      serverMessage = "LINK ESTABLISHED";
-      drawTerminal(); 
-      playBeep();
+  // check the server
+  if (!client.connected()) {
+    if (isConnectedToHost) {
+      handleDisconnection();
     }
+
+    // reconnecting to server 
+    unsigned long now = millis();
+    if (now - lastReconnectAttempt > 3000) {
+      lastReconnectAttempt = now;
+      client.stop(); 
+      yield();
+     if (client.connect(serverIP, serverPort)) {
+         Serial.println("Success!");
+      } else {
+         Serial.println("Failed. Socket might be busy.");
+      }
+    }
+    return; 
+  }
+
+  // 3. Dacă am ajuns aici, suntem conectați (WiFi + Server)
+  if (!isConnectedToHost) {
+    handleConnectionSuccess(); // Funcție nouă pentru sunet/ecran de succes
+  }
 
     noInterrupts();
     bool btn1 = B1Pressed; B1Pressed = false;
@@ -147,36 +199,17 @@ void loop() {
     bool btn4 = B4Pressed; B4Pressed = false;
     interrupts();
 
-    if(btn1) sendToServer("BOOST:TRACER");
-    if(btn2) sendToServer("BOOST:COOLDOWN");
-    if(btn4) sendToServer("BOOST:BYPASS");
-    
-    if(btn3) { 
-      int currentFreq = (freqDigits[0]*100) + (freqDigits[1]*10) + freqDigits[2];
-      sendToServer("SUBMIT:" + String(currentFreq));
-      serverMessage = "SENDING...";
-      drawTerminal();
-      playBeep();
-    }
+    if(btn1) sendToServer("BOOST:1"); // Overclock
+    if(btn2) sendToServer("BOOST:2"); // Cold Reboot
+    if(btn3) sendToServer("BOOST:3"); // Firewall Patch
+    if(btn4) sendToServer("BOOST:4"); // Signal Filter
 
     handleJoystick(); 
+    handleConfirmation();
 
     if (client.available()) {
       handleServerData();
     }
-    
-  } else {
-    if (isConnectedToHost || millis() < 2000) { 
-      isConnectedToHost = false;
-      drawWaitingScreen(); 
-    }
-
-    unsigned long now = millis();
-    if (now - lastReconnectAttempt > 3000) {
-        lastReconnectAttempt = now;
-        client.connect(serverIP, serverPort);
-    }
-  }
 }
 
 void handleJoystick() {
@@ -198,6 +231,47 @@ void handleJoystick() {
   }
 }
 
+void handleConfirmation() {
+  int reading = digitalRead(JOY_BTN_PIN);
+
+  if (reading != lastBtnState) {
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    if (reading == LOW && currentBtnState == HIGH) {
+
+      int currentFreq = (freqDigits[0] * 100) + (freqDigits[1] * 10) + freqDigits[2];
+
+      sendToServer("SUBMIT:" + String(currentFreq));
+
+      serverMessage = "SUBMITTING...";
+      drawTerminal();
+      playBeep(); 
+      
+      Serial.print("Sent Confirmation: ");
+      Serial.println(currentFreq);
+    }
+    currentBtnState = reading;
+  }
+  lastBtnState = reading;
+}
+
+
+void playWompWomp() {
+  tone(BUZZER_PIN, 300, 200);
+  delay(250);
+  tone(BUZZER_PIN, 250, 200);
+  delay(250);
+  tone(BUZZER_PIN, 200, 400); 
+}
+
+void playBipBip() {
+  tone(BUZZER_PIN, 2000, 100); 
+  delay(150);
+  tone(BUZZER_PIN, 2000, 100); 
+}
+
 void sendToServer(String msg) {
   if (client.connected()) {
     client.println("ALPHA|" + msg); // "BETA|" for the other console
@@ -206,28 +280,47 @@ void sendToServer(String msg) {
 }
 
 void handleServerData() {
-  String response = client.readStringUntil('\n');
-  response.trim();
-  if(response.length() > 0) {
+    String response = client.readStringUntil('\n');
+    response.trim();
     
-    if(response.startsWith("DRIFT:")) {
-      int driftVal = response.substring(6).toInt(); // ex: DRIFT:-10
-      int currentFreq = (freqDigits[0]*100) + (freqDigits[1]*10) + freqDigits[2];
-      currentFreq += driftVal;
-      if(currentFreq < 0) currentFreq = 0;
-      if(currentFreq > 999) currentFreq = 999;
-      
-      freqDigits[0] = (currentFreq / 100) % 10;
-      freqDigits[1] = (currentFreq / 10) % 10;
-      freqDigits[2] = currentFreq % 10;
-      
-      serverMessage = "SYS DRIFT ALERT!";
-      playBeep();
-    } else {
-      serverMessage = response; // ex: "TOO LOW", "CORE UNLOCKED"
+    if(response == "TOO LOW") {
+        playWompWomp(); // low tone
+        serverMessage = "ERROR: LOW FREQ";
+    } 
+    else if(response == "TOO HIGH") {
+        playBipBip();   // high tone
+        serverMessage = "ERROR: HIGH FREQ";
     }
+    else if(response == "MATCH") {
+        // win/success
+        tone(BUZZER_PIN, 1500, 100); delay(100);
+        tone(BUZZER_PIN, 2000, 300);
+        serverMessage = "SECTOR UNLOCKED!";
+    }
+    
     drawTerminal();
-  }
+}
+
+void handleDisconnection() {
+  isConnectedToHost = false;
+  client.stop(); 
+  drawWaitingScreen();
+
+  detachInterrupt(digitalPinToInterrupt(SW1_PIN));
+  tone(BUZZER_PIN, 600, 100); delay(300);
+  tone(BUZZER_PIN, 200, 300);
+  attachInterrupt(digitalPinToInterrupt(SW1_PIN), ISR_SW1, FALLING);
+}
+
+void handleConnectionSuccess() {
+  isConnectedToHost = true;
+  serverMessage = "LINK ESTABLISHED";
+  drawTerminal();
+
+  detachInterrupt(digitalPinToInterrupt(SW1_PIN));
+  tone(BUZZER_PIN, 1200, 100); delay(200);
+  tone(BUZZER_PIN, 2300, 150); delay(150);
+  attachInterrupt(digitalPinToInterrupt(SW1_PIN), ISR_SW1, FALLING);
 }
 
 void drawTerminal() {
