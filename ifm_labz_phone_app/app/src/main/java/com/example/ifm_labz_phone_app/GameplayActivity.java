@@ -15,13 +15,11 @@ import java.util.Random;
 
 public class GameplayActivity extends AppCompatActivity {
 
-    // UI
     private TextView tvSector, tvTimer, tvIntegrity, tvTarget, tvStatusInfo;
     private Button btnPhoneAction;
 
     private NetworkManager netManager;
 
-    // Game vars
     private String gameDifficulty = "MEDIUM";
     private String gameMode = "SINGLE";
 
@@ -29,7 +27,10 @@ public class GameplayActivity extends AppCompatActivity {
     private int systemIntegrity = 100;
     private int timeLeft = 75;
     private int nexusTarget = 0;
-    private int phoneSignal = 0;
+
+    // SEMNALELE CONSOLELOR
+    private int alphaValue = 0;
+    private int betaValue = 0;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable clockRunnable;
@@ -62,7 +63,6 @@ public class GameplayActivity extends AppCompatActivity {
         btnPhoneAction = findViewById(R.id.btnPhoneAction);
 
         startListeningToConsoles();
-
         uiHandler.postDelayed(this::startNextSector, 3000);
     }
 
@@ -93,8 +93,19 @@ public class GameplayActivity extends AppCompatActivity {
 
         if (message.contains("SUBMIT:")) {
             try {
-                int consoleValue = Integer.parseInt(message.split("SUBMIT:")[1]);
-                verifyFormula(consoleValue);
+                int value = Integer.parseInt(message.split("SUBMIT:")[1]);
+
+                if (consoleName.equals("ALPHA")) {
+                    alphaValue = value;
+                } else if (consoleName.equals("BETA")) {
+                    if (gameMode.equals("COOP")) {
+                        betaValue = value;
+                    } else {
+                        betaValue = 0;
+                    }
+                }
+
+                verifyFormula(consoleName, value);
             } catch (Exception e) {
                 tvStatusInfo.setText("Error: can't parse the frequency.");
             }
@@ -103,14 +114,15 @@ public class GameplayActivity extends AppCompatActivity {
         }
     }
 
-    private void verifyFormula(int consoleValue) {
-        int currentSum = consoleValue + phoneSignal;
+    private void verifyFormula(String consoleName, int valueJustSent) {
+        int currentSum = alphaValue + betaValue;
 
-        // Lucky match
-        if (consoleValue == nexusTarget || phoneSignal == nexusTarget) {
-            tvStatusInfo.setText("LUCKY MATCH DETECTED!");
-            netManager.broadcast("CMD|LUCKY_ALARM");
-            if (consoleValue == 0 || phoneSignal == 0) {
+        // LUCKY MATCH
+        if (valueJustSent == nexusTarget) {
+            int other = consoleName.equals("ALPHA") ? betaValue : alphaValue;
+            if (other == 0) {
+                tvStatusInfo.setText("LUCKY MATCH DETECTED!");
+                netManager.broadcast("CMD|LUCKY_ALARM");
                 sectorCleared();
                 return;
             }
@@ -159,7 +171,9 @@ public class GameplayActivity extends AppCompatActivity {
         else timeLeft = 60;
 
         nexusTarget = random.nextInt(1000);
-        phoneSignal = random.nextInt(1000);
+
+        alphaValue = 0;
+        betaValue = 0;
 
         tvSector.setText("SECTOR: " + currentSector + " / 3");
         tvTarget.setText("NEXUS TARGET: " + nexusTarget);
@@ -229,8 +243,7 @@ public class GameplayActivity extends AppCompatActivity {
             tvStatusInfo.setText("BOOSTER: Firewall Patch! (+30% Integrity)");
         } else if (boostMsg.contains("BOOST:4") && !b4Used) {
             b4Used = true;
-            int neededValue = nexusTarget - phoneSignal;
-            tvStatusInfo.setText("BOOSTER: Signal Filter! The frequency is: " + neededValue);
+            tvStatusInfo.setText("BOOSTER: Signal Filter ACTIVATED!");
         }
     }
 

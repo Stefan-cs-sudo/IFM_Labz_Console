@@ -16,8 +16,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Ifm_labz_phone_app">
         <activity
-            android:name=".activity_gameplay"
-            android:exported="false" />
+            android:name=".GameplayActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"/>
         <activity
             android:name=".SelectModeActivity"
             android:exported="false"

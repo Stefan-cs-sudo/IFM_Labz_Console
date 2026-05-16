@@ -120,6 +120,7 @@ while (WiFi.status() != WL_CONNECTED && attempts < 40) {
     if (client.connect(serverIP, serverPort)) {
       isConnectedToHost = true;
       serverMessage = "NEXUS LINK OK";
+      delay(200);
       sendToServer("CONNECT");
 
       detachInterrupt(digitalPinToInterrupt(SW1_PIN));
@@ -180,6 +181,8 @@ void loop() {
       yield();
      if (client.connect(serverIP, serverPort)) {
          Serial.println("Success!");
+         delay(200);
+         sendToServer("CONNECT");
       } else {
          Serial.println("Failed. Socket might be busy.");
       }
@@ -314,6 +317,8 @@ void handleDisconnection() {
 
 void handleConnectionSuccess() {
   isConnectedToHost = true;
+  delay(200);
+  sendToServer("CONNECT");
   serverMessage = "LINK ESTABLISHED";
   drawTerminal();
 
