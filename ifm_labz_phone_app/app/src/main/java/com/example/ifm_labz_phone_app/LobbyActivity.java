@@ -1,7 +1,6 @@
 package com.example.ifm_labz_phone_app;
 
-import android.net.wifi.WifiInfo;
-import android.net.wifi.WifiManager;
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
@@ -9,41 +8,43 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
-public class GameActivity extends AppCompatActivity {
+public class LobbyActivity extends AppCompatActivity {
 
     private TextView tvServerIp, tvStatus;
     private ServerSocket serverSocket;
     private Thread serverThread;
 
-    private String gameDifficulty;
+    private String gameDifficulty = "MEDIUM";
+    private String gameMode = "SINGLE";
+    private boolean isTransitioningToGame = false;
 
-    private java.util.List<Socket> activeClients = new java.util.ArrayList<>();
+    private final java.util.List<Socket> activeClients = new java.util.ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_game);
 
+        if (getIntent() != null && getIntent().hasExtra("GAME_MODE")) {
+            gameMode = getIntent().getStringExtra("GAME_MODE");
+        }
+
         if (getIntent() != null && getIntent().hasExtra("SELECTED_DIFFICULTY")) {
             gameDifficulty = getIntent().getStringExtra("SELECTED_DIFFICULTY");
-        } else {
-            gameDifficulty = "MEDIUM";
         }
 
         tvServerIp = findViewById(R.id.tvServerIp);
         tvStatus = findViewById(R.id.tvStatus);
 
         String ip = getLocalIpAddress();
-        tvServerIp.setText("SERVER IP: " + ip + " | PORT: 8080 | MODE: "+gameDifficulty);
+        tvServerIp.setText("SERVER IP: " + ip + " | PORT: 8080 | MODE: " + gameDifficulty);
         updateLog("Waiting for the consoles to connect...");
 
         serverThread = new Thread(new ServerThread());
@@ -69,44 +70,81 @@ public class GameActivity extends AppCompatActivity {
     }
 
     class ClientHandler implements Runnable {
-        private Socket socket;
+        private final Socket socket;
         public ClientHandler(Socket socket) { this.socket = socket; }
 
         @Override
         public void run() {
             try {
                 socket.setTcpNoDelay(true);
-
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-
                 String message;
-                while ((message = in.readLine()) != null) {
+
+                NetworkManager netManager = NetworkManager.getInstance();
+
+                while (!isTransitioningToGame && (message = in.readLine()) != null) {
+                    message = message.trim();
                     updateLog("RECEIVED: " + message);
 
-                    if (message.contains("SUBMIT")) {
-                        out.println("DATA-ANALYSED");
-                        out.flush();
-                    } else if (message.contains("BOOST")) {
-                        out.println("BOOSTER ACTIVATED");
-                        out.flush();
+                    if (message.contains("ALPHA|CONNECT")) {
+                        netManager.alphaSocket = socket;
+                        updateLog(">>> ALPHA CONNECTED");
+                    } else if (message.contains("BETA|CONNECT")) {
+                        netManager.betaSocket = socket;
+                        updateLog(">>> BETA CONNECTED");
+                    }
+
+                    // SINGLE PLAYER
+                    if (gameMode.equals("SINGLE") && netManager.alphaSocket != null) {
+                        isTransitioningToGame = true;
+                        netManager.betaSocket = netManager.alphaSocket;
+
+                        runOnUiThread(() -> {
+                            updateLog(">>> SINGLE MODE: START GAME");
+                            Intent intent = new Intent(LobbyActivity.this, GameplayActivity.class);
+                            intent.putExtra("SELECTED_DIFFICULTY", gameDifficulty);
+                            intent.putExtra("GAME_MODE", gameMode);
+                            startActivity(intent);
+                            finish();
+                        });
+                        break;
+                    }
+
+                    // CO-OP
+                    if (gameMode.equals("COOP") && netManager.alphaSocket != null && netManager.betaSocket != null) {
+                        isTransitioningToGame = true;
+
+                        runOnUiThread(() -> {
+                            updateLog(">>> COOP MODE: START GAME");
+                            Intent intent = new Intent(LobbyActivity.this, GameplayActivity.class);
+                            intent.putExtra("SELECTED_DIFFICULTY", gameDifficulty);
+                            intent.putExtra("GAME_MODE", gameMode);
+                            startActivity(intent);
+                            finish();
+                        });
+                        break;
                     }
                 }
             } catch (IOException e) {
-                updateLog(">> A CONSOLE HAS DISCONNECTED");
+                updateLog(">> A CONSOLE HAS DISCONNECTED (Signal Lost)");
                 e.printStackTrace();
+            } finally {
+                try {
+                    if (!isTransitioningToGame && socket != null && !socket.isClosed()) {
+                        socket.close();
+                    }
+                    activeClients.remove(socket);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         }
     }
 
     private void updateLog(final String message) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                tvStatus.append(message + "\n");
-            }
-        });
+        runOnUiThread(() -> tvStatus.append(message + "\n"));
     }
+
     private String getLocalIpAddress() {
         try {
             List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
@@ -115,9 +153,7 @@ public class GameActivity extends AppCompatActivity {
                 for (InetAddress addr : addrs) {
                     if (!addr.isLoopbackAddress()) {
                         String sAddr = addr.getHostAddress();
-                        boolean isIPv4 = sAddr.indexOf(':') < 0;
-
-                        if (isIPv4) {
+                        if (sAddr.indexOf(':') < 0) {
                             if (sAddr.startsWith("192.168.") || sAddr.startsWith("10.") || sAddr.startsWith("172.")) {
                                 return sAddr;
                             }
@@ -134,6 +170,8 @@ public class GameActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (isTransitioningToGame) return;
+
         if (serverSocket != null) {
             try { serverSocket.close(); } catch (IOException e) { e.printStackTrace(); }
         }
