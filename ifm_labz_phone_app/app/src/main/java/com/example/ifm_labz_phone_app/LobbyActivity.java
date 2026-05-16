@@ -86,6 +86,8 @@ public class LobbyActivity extends AppCompatActivity {
                     message = message.trim();
                     updateLog("RECEIVED: " + message);
 
+                    updateLog("RAW: " + message);
+
                     if (message.contains("ALPHA|CONNECT")) {
                         netManager.alphaSocket = socket;
                         updateLog(">>> ALPHA CONNECTED");
