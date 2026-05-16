@@ -36,17 +36,18 @@ public class StoryActivity extends AppCompatActivity {
         final String selectedDifficulty = getIntent().getStringExtra("SELECTED_DIFFICULTY") != null ?
                 getIntent().getStringExtra("SELECTED_DIFFICULTY") : "MEDIUM";
 
+        final String gameMode = getIntent().getStringExtra("GAME_MODE") != null ?
+                getIntent().getStringExtra("GAME_MODE") : "SINGLE";
+
         Button btnBeginBypass = findViewById(R.id.btnBeginBypass);
         if (btnBeginBypass != null) {
-            btnBeginBypass.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    Intent intent = new Intent(StoryActivity.this, GameActivity.class);
-                    intent.putExtra("SELECTED_DIFFICULTY", selectedDifficulty);
-                    startActivity(intent);
-                    finish();
-                    overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-                }
+            btnBeginBypass.setOnClickListener(v -> {
+                Intent intent = new Intent(StoryActivity.this, LobbyActivity.class);
+                intent.putExtra("SELECTED_DIFFICULTY", selectedDifficulty);
+                intent.putExtra("GAME_MODE", gameMode);
+                startActivity(intent);
+                finish();
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
             });
         }
     }

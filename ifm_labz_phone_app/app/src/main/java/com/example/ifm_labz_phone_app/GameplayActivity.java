@@ -1,0 +1,261 @@
+package com.example.ifm_labz_phone_app;
+
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.widget.Button;
+import android.widget.TextView;
+import androidx.appcompat.app.AppCompatActivity;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.Socket;
+import java.util.Random;
+
+public class GameplayActivity extends AppCompatActivity {
+
+    // UI
+    private TextView tvSector, tvTimer, tvIntegrity, tvTarget, tvStatusInfo;
+    private Button btnPhoneAction;
+
+    private NetworkManager netManager;
+
+    // Game vars
+    private String gameDifficulty = "MEDIUM";
+    private String gameMode = "SINGLE";
+
+    private int currentSector = 1;
+    private int systemIntegrity = 100;
+    private int timeLeft = 75;
+    private int nexusTarget = 0;
+    private int phoneSignal = 0;
+
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private Runnable clockRunnable;
+    private Runnable oscillationRunnable;
+    private final Random random = new Random();
+
+    private boolean b1Used = false, b2Used = false, b3Used = false, b4Used = false;
+    private boolean isTargetFrozen = false;
+    private boolean isGameOver = false;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_gameplay);
+
+        if (getIntent() != null && getIntent().hasExtra("SELECTED_DIFFICULTY")) {
+            gameDifficulty = getIntent().getStringExtra("SELECTED_DIFFICULTY");
+        }
+        if (getIntent() != null && getIntent().hasExtra("GAME_MODE")) {
+            gameMode = getIntent().getStringExtra("GAME_MODE");
+        }
+
+        netManager = NetworkManager.getInstance();
+
+        tvSector = findViewById(R.id.tvSector);
+        tvTimer = findViewById(R.id.tvTimer);
+        tvIntegrity = findViewById(R.id.tvIntegrity);
+        tvTarget = findViewById(R.id.tvTarget);
+        tvStatusInfo = findViewById(R.id.tvStatusInfo);
+        btnPhoneAction = findViewById(R.id.btnPhoneAction);
+
+        startListeningToConsoles();
+
+        uiHandler.postDelayed(this::startNextSector, 3000);
+    }
+
+    private void startListeningToConsoles() {
+        if (netManager.alphaSocket != null) {
+            new Thread(() -> listenLoop(netManager.alphaSocket, "ALPHA")).start();
+        }
+        if (gameMode.equals("COOP") && netManager.betaSocket != null && netManager.betaSocket != netManager.alphaSocket) {
+            new Thread(() -> listenLoop(netManager.betaSocket, "BETA")).start();
+        }
+    }
+
+    private void listenLoop(Socket socket, String consoleName) {
+        try {
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            String message;
+            while (!isGameOver && (message = in.readLine()) != null) {
+                final String finalMsg = message.trim();
+                uiHandler.post(() -> processConsoleInput(consoleName, finalMsg));
+            }
+        } catch (IOException e) {
+            uiHandler.post(() -> tvStatusInfo.setText(consoleName + " DECONECTED WHILE IN GAME!"));
+        }
+    }
+
+    private void processConsoleInput(String consoleName, String message) {
+        if (isGameOver) return;
+
+        if (message.contains("SUBMIT:")) {
+            try {
+                int consoleValue = Integer.parseInt(message.split("SUBMIT:")[1]);
+                verifyFormula(consoleValue);
+            } catch (Exception e) {
+                tvStatusInfo.setText("Error: can't parse the frequency.");
+            }
+        } else if (message.contains("BOOST:")) {
+            handleBooster(message);
+        }
+    }
+
+    private void verifyFormula(int consoleValue) {
+        int currentSum = consoleValue + phoneSignal;
+
+        // Lucky match
+        if (consoleValue == nexusTarget || phoneSignal == nexusTarget) {
+            tvStatusInfo.setText("LUCKY MATCH DETECTED!");
+            netManager.broadcast("CMD|LUCKY_ALARM");
+            if (consoleValue == 0 || phoneSignal == 0) {
+                sectorCleared();
+                return;
+            }
+        }
+
+        if (currentSum == nexusTarget) {
+            sectorCleared();
+        } else {
+            if (currentSum < nexusTarget) {
+                netManager.broadcast("TOO LOW");
+                tvStatusInfo.setText("Sum of the signals is TOO LOW!");
+            } else {
+                netManager.broadcast("TOO HIGH");
+                tvStatusInfo.setText("Sum of the signals is TOO HIGH!");
+            }
+            applyPenalty();
+        }
+    }
+
+    private void applyPenalty() {
+        systemIntegrity -= 10;
+        tvIntegrity.setText("System Integrity: " + systemIntegrity + "%");
+        if (systemIntegrity <= 0) {
+            endGame(false, "INTEGRITY COMPROMISED (0%)");
+        }
+    }
+
+    private void sectorCleared() {
+        stopTimers();
+        netManager.broadcast("MATCH");
+        tvStatusInfo.setText("SECTOR " + currentSector + " UNLOCKED!");
+
+        if (currentSector >= 3) {
+            endGame(true, "VICTORY! ALL SECTORS HAVE BEEN BROKEN!");
+        } else {
+            currentSector++;
+            uiHandler.postDelayed(this::startNextSector, 3000);
+        }
+    }
+
+    private void startNextSector() {
+        if (isGameOver) return;
+
+        if (gameDifficulty.equals("EASY")) timeLeft = 90;
+        else if (gameDifficulty.equals("MEDIUM")) timeLeft = 75;
+        else timeLeft = 60;
+
+        nexusTarget = random.nextInt(1000);
+        phoneSignal = random.nextInt(1000);
+
+        tvSector.setText("SECTOR: " + currentSector + " / 3");
+        tvTarget.setText("NEXUS TARGET: " + nexusTarget);
+        tvTimer.setText("TIME: " + timeLeft + "s");
+        tvStatusInfo.setText("Sector initialized. Match the frequencies!");
+
+        netManager.broadcast("CMD|START_GAME");
+
+        startClock();
+        startOscillationEngine();
+    }
+
+    private void startOscillationEngine() {
+        if (gameDifficulty.equals("EASY")) return;
+
+        int interval = gameDifficulty.equals("MEDIUM") ? 20000 : 10000;
+
+        oscillationRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!isTargetFrozen && !isGameOver) {
+                    int variation = gameDifficulty.equals("MEDIUM") ? (random.nextInt(3) + 1) : (random.nextInt(5) + 3);
+                    if (random.nextBoolean()) variation = -variation;
+
+                    nexusTarget += variation;
+                    tvTarget.setText("NEXUS TARGET: " + nexusTarget + " (OSCILLATION)");
+                }
+                uiHandler.postDelayed(this, interval);
+            }
+        };
+        uiHandler.postDelayed(oscillationRunnable, interval);
+    }
+
+    private void startClock() {
+        clockRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!isGameOver) {
+                    timeLeft--;
+                    tvTimer.setText("TIME: " + timeLeft + "s");
+
+                    if (timeLeft <= 0) {
+                        endGame(false, "TIMEOUT: TIME HAS EXPIRED!");
+                    } else {
+                        uiHandler.postDelayed(this, 1000);
+                    }
+                }
+            }
+        };
+        uiHandler.postDelayed(clockRunnable, 1000);
+    }
+
+    private void handleBooster(String boostMsg) {
+        if (boostMsg.contains("BOOST:1") && !b1Used) {
+            b1Used = true;
+            timeLeft += 20;
+            tvStatusInfo.setText("BOOSTER: Overclock activated! (+20s)");
+        } else if (boostMsg.contains("BOOST:2") && !b2Used) {
+            b2Used = true;
+            isTargetFrozen = true;
+            tvStatusInfo.setText("BOOSTER: Cold Reboot! Target frozen for 15s");
+            uiHandler.postDelayed(() -> isTargetFrozen = false, 15000);
+        } else if (boostMsg.contains("BOOST:3") && !b3Used) {
+            b3Used = true;
+            systemIntegrity = Math.min(100, systemIntegrity + 30);
+            tvIntegrity.setText("System Integrity: " + systemIntegrity + "%");
+            tvStatusInfo.setText("BOOSTER: Firewall Patch! (+30% Integrity)");
+        } else if (boostMsg.contains("BOOST:4") && !b4Used) {
+            b4Used = true;
+            int neededValue = nexusTarget - phoneSignal;
+            tvStatusInfo.setText("BOOSTER: Signal Filter! The frequency is: " + neededValue);
+        }
+    }
+
+    private void endGame(boolean success, String reason) {
+        isGameOver = true;
+        stopTimers();
+
+        if (success) {
+            tvStatusInfo.setText("VICTORY");
+            netManager.broadcast("CMD|VICTORY");
+        } else {
+            tvStatusInfo.setText("GAME OVER: " + reason);
+            netManager.broadcast("CMD|LOCKDOWN");
+        }
+    }
+
+    private void stopTimers() {
+        if (clockRunnable != null) uiHandler.removeCallbacks(clockRunnable);
+        if (oscillationRunnable != null) uiHandler.removeCallbacks(oscillationRunnable);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        stopTimers();
+        isGameOver = true;
+    }
+}
