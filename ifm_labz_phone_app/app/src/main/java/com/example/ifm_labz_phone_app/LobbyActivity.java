@@ -172,15 +172,20 @@ public class LobbyActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (isTransitioningToGame) return;
-
-        if (serverSocket != null) {
+        if (serverThread != null) {
+            serverThread.interrupt();
+        }
+        if (serverSocket != null && !serverSocket.isClosed()) {
             try { serverSocket.close(); } catch (IOException e) { e.printStackTrace(); }
         }
-        for (Socket client : activeClients) {
-            if (client != null) {
-                try { client.close(); } catch (IOException e) { e.printStackTrace(); }
+
+        if (!isTransitioningToGame) {
+            for (Socket client : activeClients) {
+                if (client != null && !client.isClosed()) {
+                    try { client.close(); } catch (IOException e) { e.printStackTrace(); }
+                }
             }
+            NetworkManager.getInstance().closeAll();
         }
     }
 }

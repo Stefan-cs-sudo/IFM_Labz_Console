@@ -1,5 +1,6 @@
 package com.example.ifm_labz_phone_app;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,7 +17,6 @@ import java.util.Random;
 public class GameplayActivity extends AppCompatActivity {
 
     private TextView tvSector, tvTimer, tvIntegrity, tvTarget, tvStatusInfo;
-    private Button btnPhoneAction;
 
     private NetworkManager netManager;
 
@@ -60,7 +60,6 @@ public class GameplayActivity extends AppCompatActivity {
         tvIntegrity = findViewById(R.id.tvIntegrity);
         tvTarget = findViewById(R.id.tvTarget);
         tvStatusInfo = findViewById(R.id.tvStatusInfo);
-        btnPhoneAction = findViewById(R.id.btnPhoneAction);
 
         startListeningToConsoles();
         uiHandler.postDelayed(this::startNextSector, 3000);
@@ -258,6 +257,22 @@ public class GameplayActivity extends AppCompatActivity {
             tvStatusInfo.setText("GAME OVER: " + reason);
             netManager.broadcast("CMD|LOCKDOWN");
         }
+        netManager.broadcast("CMD|END_GAME");
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            netManager.closeAll();
+
+            Intent intent;
+            if (success) {
+                intent = new Intent(GameplayActivity.this, VictoryActivity.class);
+            } else {
+                intent = new Intent(GameplayActivity.this, GameOverActivity.class);
+                intent.putExtra("REASON", reason);
+                intent.putExtra("GAME_MODE", gameMode);
+                intent.putExtra("SELECTED_DIFFICULTY", gameDifficulty);
+            }
+            startActivity(intent);
+            finish();
+        }, 400);
     }
 
     private void stopTimers() {
@@ -270,5 +285,10 @@ public class GameplayActivity extends AppCompatActivity {
         super.onDestroy();
         stopTimers();
         isGameOver = true;
+        netManager.broadcast("CMD|END_GAME");
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            netManager.closeAll();
+        }, 500);
+
     }
 }

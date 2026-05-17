@@ -20,14 +20,13 @@ public class NetworkManager {
 
     public void sendToConsole(Socket socket, String cmd) {
         if (socket != null && !socket.isClosed()) {
-            new Thread(() -> {
-                try {
-                    PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-                    out.println(cmd);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }).start();
+            try {
+                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                out.println(cmd);
+                out.flush();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -36,5 +35,17 @@ public class NetworkManager {
         if (betaSocket != null && betaSocket != alphaSocket) {
             sendToConsole(betaSocket, cmd);
         }
+    }
+
+    public void closeAll() {
+        try {
+            if (alphaSocket != null && !alphaSocket.isClosed()) alphaSocket.close();
+        } catch (Exception ignored) {}
+        try {
+            if (betaSocket != null && !betaSocket.isClosed()) betaSocket.close();
+        } catch (Exception ignored) {}
+
+        alphaSocket = null;
+        betaSocket = null;
     }
 }
