@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/game_background"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/tvLoseTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="SYSTEM STATUS: HARD LOCKDOWN"
+        android:textColor="#FF0000"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:fontFamily="monospace"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
+
+    <TextView
+        android:id="@+id/tvLoseSubtitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Critical Failure"
+        android:textColor="#88888F"
+        android:textSize="14sp"
+        android:textStyle="italic"
+        android:fontFamily="monospace"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:layout_marginTop="6dp"
+        app:layout_constraintTop_toBottomOf="@id/tvLoseTitle"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
+
+    <TextView
+        android:id="@+id/tvLoseContent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
+        android:lineSpacingMultiplier="1.2"
+        android:textColor="#E2E2E6"
+        android:textSize="16sp"
+        android:fontFamily="monospace"
+        android:text="&lt;font color='#FF7A00'&gt;&lt;b&gt;INTEGRITY FAILURE:&lt;/b&gt;&lt;/font&gt; The system integrity has reached zero percent.&lt;br/&gt;
+        &lt;font color='#FF7A00'&gt;&lt;b&gt;LINK TERMINATED:&lt;/b&gt;&lt;/font&gt; The mainframe has initiated an emergency lockdown across all remaining communication sectors to prevent further intrusion.&lt;br/&gt;
+        &lt;font color='#FF7A00'&gt;&lt;b&gt;CONNECTION LOST:&lt;/b&gt;&lt;/font&gt; The target frequency was lost, the console has gone completely offline, and the connection cannot be restored.&lt;br/&gt;
+        &lt;font color='#FF7A00'&gt;&lt;b&gt;MISSION FAILED:&lt;/b&gt;&lt;/font&gt; The operation is a failure."
+        app:layout_constraintTop_toBottomOf="@id/tvLoseSubtitle"
+        app:layout_constraintBottom_toTopOf="@id/btnRetry"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
+
+    <Button
+        android:id="@+id/btnRetry"
+        android:layout_width="180dp"
+        android:layout_height="54dp"
+        android:text="RETRY BYPASS"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#FF7A00"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
+</androidx.constraintlayout.widget.ConstraintLayout>
