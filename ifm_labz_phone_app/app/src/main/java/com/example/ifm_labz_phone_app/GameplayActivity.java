@@ -113,6 +113,24 @@ public class GameplayActivity extends AppCompatActivity {
         }
     }
 
+    private String getTargetIntervalText() {
+        int margin;
+        if (gameDifficulty.equals("EASY")) margin = 20;
+        else if (gameDifficulty.equals("MEDIUM")) margin = 50;
+        else margin = 100;
+
+        int lowRaw = nexusTarget - margin;
+        int highRaw = nexusTarget + margin;
+
+        int low = (int)Math.floor(lowRaw / 10.0) * 10;
+        int high = (int)Math.ceil(highRaw / 10.0) * 10;
+
+        if (low < 0) low = 0;
+        if (high > 999) high = 999;
+
+        return "NEXUS TARGET: [" + low + " - " + high + "]";
+    }
+
     private void verifyFormula(String consoleName, int valueJustSent) {
         int currentSum = alphaValue + betaValue;
 
@@ -130,13 +148,17 @@ public class GameplayActivity extends AppCompatActivity {
         if (currentSum == nexusTarget) {
             sectorCleared();
         } else {
+            int baseLow = (nexusTarget / 100) * 100;
+            int baseHigh = baseLow + 100;
+
             if (currentSum < nexusTarget) {
                 netManager.broadcast("TOO LOW");
-                tvStatusInfo.setText("Sum of the signals is TOO LOW!");
+                tvStatusInfo.setText("Sum TOO LOW!");
             } else {
-                netManager.broadcast("TOO HIGH");
-                tvStatusInfo.setText("Sum of the signals is TOO HIGH!");
+                netManager.broadcast("TOO HIGH|");
+                tvStatusInfo.setText("Sum TOO HIGH!");
             }
+
             applyPenalty();
         }
     }
@@ -175,7 +197,7 @@ public class GameplayActivity extends AppCompatActivity {
         betaValue = 0;
 
         tvSector.setText("SECTOR: " + currentSector + " / 3");
-        tvTarget.setText("NEXUS TARGET: " + nexusTarget);
+        tvTarget.setText(getTargetIntervalText());
         tvTimer.setText("TIME: " + timeLeft + "s");
         tvStatusInfo.setText("Sector initialized. Match the frequencies!");
 
@@ -198,7 +220,7 @@ public class GameplayActivity extends AppCompatActivity {
                     if (random.nextBoolean()) variation = -variation;
 
                     nexusTarget += variation;
-                    tvTarget.setText("NEXUS TARGET: " + nexusTarget + " (OSCILLATION)");
+                    tvTarget.setText(getTargetIntervalText() + " (OSCILLATION)");
                 }
                 uiHandler.postDelayed(this, interval);
             }
