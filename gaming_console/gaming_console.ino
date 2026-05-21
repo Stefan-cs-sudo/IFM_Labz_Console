@@ -1,13 +1,13 @@
-#include <WiFi.h> // Pentru ESP32
+#include <WiFi.h>
 #include "SPI.h"
 #include "Adafruit_ST7735.h"
 #include "pca9557_cdd.h"
 #include "LcdUtils.h"
 
 // WIFI SETTINGS
-const char* ssid = "POCOX7Pro"; 
-const char* password = "23062005";
-const char* serverIP = "10.30.106.70"; // PHONE IP
+const char* ssid = "AndroidAP"; 
+const char* password = "gata1234";
+const char* serverIP = "10.118.144.124"; 
 const int serverPort = 8080;
 
 WiFiClient client;
@@ -26,7 +26,7 @@ WiFiClient client;
 #define BUZZER_PIN 3
 #define PCA_ADDRESS 25
 
-//debouncing - joystick button
+//debouncing  joystick button
 bool lastBtnState = HIGH;
 bool currentBtnState = HIGH;
 unsigned long lastDebounceTime = 0;
@@ -90,7 +90,7 @@ for (int i = 0; i < n; i++) {
   attachInterrupt(digitalPinToInterrupt(SW4_PIN), ISR_SW4, FALLING);
 
   SPI.begin();
-  lcd.initR(INITR_TDO128x96);
+  lcd.initR(INITR_BLACKTAB); 
   lcd.setRotation(0);
   lcd.fillScreen(ST77XX_BLACK);
   lcd.setTextSize(1);
@@ -111,7 +111,7 @@ for (int i = 0; i < n; i++) {
 while (WiFi.status() != WL_CONNECTED && attempts < 40) { 
     delay(500);
     Serial.print("Status: ");
-    Serial.println(WiFi.status()); // 6 = WRONG_PASSWORD, 1 = NO_SSID
+    Serial.println(WiFi.status()); 
     attempts++;
 }
   
@@ -216,19 +216,39 @@ void loop() {
 }
 
 void handleJoystick() {
+  static int filtLR = -1;
+  static int filtUD = -1;
+
   int rawLR = analogRead(JOY_VRY_PIN);
   int rawUD = analogRead(JOY_VRX_PIN);
+
+  // initialize filter
+  if (filtLR < 0) filtLR = rawLR;
+  if (filtUD < 0) filtUD = rawUD;
+
+  // low-pass filter (EMA)
+  filtLR = (filtLR * 7 + rawLR) / 8;
+  filtUD = (filtUD * 7 + rawUD) / 8;
+
   if (millis() - lastJoyMoveMs < 160) return;
-  const int TH = 650;
+
+  // Bigger deadzone for noisy ADC/joystick
+  const int DEADZONE = 900;  // try 700..1300
+  int dLR = filtLR - joyCenterX;
+  int dUD = filtUD - joyCenterY;
+
+  if (abs(dLR) < DEADZONE) dLR = 0;
+  if (abs(dUD) < DEADZONE) dUD = 0;
 
   bool moved = false;
-  if (rawLR > joyCenterX + TH) { selectedIdx = (selectedIdx == 0) ? 2 : (selectedIdx - 1); moved = true; }
-  else if (rawLR < joyCenterX - TH) { selectedIdx = (selectedIdx + 1) % 3; moved = true; }
-  
-  if (rawUD > joyCenterY + TH) { freqDigits[selectedIdx] = (freqDigits[selectedIdx] == 0) ? 9 : (freqDigits[selectedIdx] - 1); moved = true; }
-  else if (rawUD < joyCenterY - TH) { freqDigits[selectedIdx] = (freqDigits[selectedIdx] + 1) % 10; moved = true; }
 
-  if(moved) {
+  if (dLR > 0) { selectedIdx = (selectedIdx == 0) ? 2 : (selectedIdx - 1); moved = true; }
+  else if (dLR < 0) { selectedIdx = (selectedIdx + 1) % 3; moved = true; }
+
+  if (dUD > 0) { freqDigits[selectedIdx] = (freqDigits[selectedIdx] == 0) ? 9 : (freqDigits[selectedIdx] - 1); moved = true; }
+  else if (dUD < 0) { freqDigits[selectedIdx] = (freqDigits[selectedIdx] + 1) % 10; moved = true; }
+
+  if (moved) {
     lastJoyMoveMs = millis();
     drawTerminal();
   }
@@ -277,8 +297,8 @@ void playBipBip() {
 
 void sendToServer(String msg) {
   if (client.connected()) {
-    client.println("ALPHA|" + msg); // "BETA|" for the other console
-    Serial.println("Sent: " + msg);
+    client.println("ALPHA|" + msg);
+    Serial.println("Sent: ALPHA|  " + msg);
   }
 }
 
@@ -287,11 +307,11 @@ void handleServerData() {
     response.trim();
     
     if(response == "TOO LOW") {
-        playWompWomp(); // low tone
+        playWompWomp(); 
         serverMessage = "ERROR: LOW FREQ";
     } 
     else if(response == "TOO HIGH") {
-        playBipBip();   // high tone
+        playBipBip();  
         serverMessage = "ERROR: HIGH FREQ";
     }
     else if(response == "MATCH") {
@@ -372,3 +392,4 @@ void playBeep() {
   delay(100);
   noTone(BUZZER_PIN);
 }
+

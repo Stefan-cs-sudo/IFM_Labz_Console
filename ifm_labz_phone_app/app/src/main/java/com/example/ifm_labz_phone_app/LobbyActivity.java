@@ -14,6 +14,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LobbyActivity extends AppCompatActivity {
 
@@ -23,7 +24,7 @@ public class LobbyActivity extends AppCompatActivity {
 
     private String gameDifficulty = "MEDIUM";
     private String gameMode = "SINGLE";
-    private boolean isTransitioningToGame = false;
+    private final AtomicBoolean transitioning = new AtomicBoolean(false);
 
     private final java.util.List<Socket> activeClients = new java.util.ArrayList<>();
 
@@ -82,7 +83,7 @@ public class LobbyActivity extends AppCompatActivity {
 
                 NetworkManager netManager = NetworkManager.getInstance();
 
-                while (!isTransitioningToGame && (message = in.readLine()) != null) {
+                while (!transitioning.get() && (message = in.readLine()) != null) {
                     message = message.trim();
                     updateLog("RECEIVED: " + message);
 
@@ -96,34 +97,38 @@ public class LobbyActivity extends AppCompatActivity {
                         updateLog(">>> BETA CONNECTED");
                     }
 
-                    // SINGLE PLAYER
-                    if (gameMode.equals("SINGLE") && netManager.alphaSocket != null) {
-                        isTransitioningToGame = true;
-                        netManager.betaSocket = netManager.alphaSocket;
 
-                        runOnUiThread(() -> {
-                            updateLog(">>> SINGLE MODE: START GAME");
-                            Intent intent = new Intent(LobbyActivity.this, GameplayActivity.class);
-                            intent.putExtra("SELECTED_DIFFICULTY", gameDifficulty);
-                            intent.putExtra("GAME_MODE", gameMode);
-                            startActivity(intent);
-                            finish();
-                        });
+                    if (gameMode.equals("SINGLE") && netManager.alphaSocket != null) {
+                        if (transitioning.compareAndSet(false, true)) {
+                            netManager.betaSocket = netManager.alphaSocket;
+                            shutdownServer();
+
+                            runOnUiThread(() -> {
+                                updateLog(">>> SINGLE MODE: START GAME");
+                                Intent intent = new Intent(LobbyActivity.this, GameplayActivity.class);
+                                intent.putExtra("SELECTED_DIFFICULTY", gameDifficulty);
+                                intent.putExtra("GAME_MODE", gameMode);
+                                startActivity(intent);
+                                finish();
+                            });
+                        }
                         break;
                     }
 
                     // CO-OP
                     if (gameMode.equals("COOP") && netManager.alphaSocket != null && netManager.betaSocket != null) {
-                        isTransitioningToGame = true;
+                        if (transitioning.compareAndSet(false, true)) {
+                            shutdownServer();
 
-                        runOnUiThread(() -> {
-                            updateLog(">>> COOP MODE: START GAME");
-                            Intent intent = new Intent(LobbyActivity.this, GameplayActivity.class);
-                            intent.putExtra("SELECTED_DIFFICULTY", gameDifficulty);
-                            intent.putExtra("GAME_MODE", gameMode);
-                            startActivity(intent);
-                            finish();
-                        });
+                            runOnUiThread(() -> {
+                                updateLog(">>> COOP MODE: START GAME");
+                                Intent intent = new Intent(LobbyActivity.this, GameplayActivity.class);
+                                intent.putExtra("SELECTED_DIFFICULTY", gameDifficulty);
+                                intent.putExtra("GAME_MODE", gameMode);
+                                startActivity(intent);
+                                finish();
+                            });
+                        }
                         break;
                     }
                 }
@@ -132,7 +137,7 @@ public class LobbyActivity extends AppCompatActivity {
                 e.printStackTrace();
             } finally {
                 try {
-                    if (!isTransitioningToGame && socket != null && !socket.isClosed()) {
+                    if (transitioning.get()==false && socket != null && !socket.isClosed()) {
                         socket.close();
                     }
                     activeClients.remove(socket);
@@ -140,6 +145,19 @@ public class LobbyActivity extends AppCompatActivity {
                     e.printStackTrace();
                 }
             }
+        }
+    }
+
+
+    private void shutdownServer() {
+        try {
+            if (serverSocket != null && !serverSocket.isClosed()) {
+                serverSocket.close();
+            }
+        } catch (IOException ignored) {}
+
+        if (serverThread != null) {
+            serverThread.interrupt();
         }
     }
 
@@ -179,7 +197,7 @@ public class LobbyActivity extends AppCompatActivity {
             try { serverSocket.close(); } catch (IOException e) { e.printStackTrace(); }
         }
 
-        if (!isTransitioningToGame) {
+        if (transitioning.get()==false) {
             for (Socket client : activeClients) {
                 if (client != null && !client.isClosed()) {
                     try { client.close(); } catch (IOException e) { e.printStackTrace(); }
