@@ -28,7 +28,7 @@ public class GameplayActivity extends AppCompatActivity {
     private int timeLeft = 75;
     private int nexusTarget = 0;
 
-    // SEMNALELE CONSOLELOR
+
     private int alphaValue = 0;
     private int betaValue = 0;
 
@@ -40,6 +40,8 @@ public class GameplayActivity extends AppCompatActivity {
     private boolean b1Used = false, b2Used = false, b3Used = false, b4Used = false;
     private boolean isTargetFrozen = false;
     private boolean isGameOver = false;
+    private Runnable revealTargetRunnable = null;
+    private boolean isTargetRevealedTemporarily = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -122,8 +124,8 @@ public class GameplayActivity extends AppCompatActivity {
         int lowRaw = nexusTarget - margin;
         int highRaw = nexusTarget + margin;
 
-        int low = (int)Math.floor(lowRaw / 10.0) * 10;
-        int high = (int)Math.ceil(highRaw / 10.0) * 10;
+        int low = (int) Math.floor(lowRaw / 10.0) * 10;
+        int high = (int) Math.ceil(highRaw / 10.0) * 10;
 
         if (low < 0) low = 0;
         if (high > 999) high = 999;
@@ -148,9 +150,6 @@ public class GameplayActivity extends AppCompatActivity {
         if (currentSum == nexusTarget) {
             sectorCleared();
         } else {
-            int baseLow = (nexusTarget / 100) * 100;
-            int baseHigh = baseLow + 100;
-
             if (currentSum < nexusTarget) {
                 netManager.broadcast("TOO LOW");
                 tvStatusInfo.setText("Sum TOO LOW!");
@@ -197,7 +196,9 @@ public class GameplayActivity extends AppCompatActivity {
         betaValue = 0;
 
         tvSector.setText("SECTOR: " + currentSector + " / 3");
-        tvTarget.setText(getTargetIntervalText());
+        if (!isTargetRevealedTemporarily) {
+            tvTarget.setText(getTargetIntervalText());
+        }
         tvTimer.setText("TIME: " + timeLeft + "s");
         tvStatusInfo.setText("Sector initialized. Match the frequencies!");
 
@@ -216,11 +217,17 @@ public class GameplayActivity extends AppCompatActivity {
             @Override
             public void run() {
                 if (!isTargetFrozen && !isGameOver) {
-                    int variation = gameDifficulty.equals("MEDIUM") ? (random.nextInt(3) + 1) : (random.nextInt(5) + 3);
+                    int variation = gameDifficulty.equals("MEDIUM")
+                            ? (random.nextInt(3) + 1)
+                            : (random.nextInt(5) + 3);
+
                     if (random.nextBoolean()) variation = -variation;
 
                     nexusTarget += variation;
-                    tvTarget.setText(getTargetIntervalText() + " (OSCILLATION)");
+
+                    if (!isTargetRevealedTemporarily) {
+                        tvTarget.setText(getTargetIntervalText() + " (OSCILLATION)");
+                    }
                 }
                 uiHandler.postDelayed(this, interval);
             }
@@ -265,6 +272,20 @@ public class GameplayActivity extends AppCompatActivity {
         } else if (boostMsg.contains("BOOST:4") && !b4Used) {
             b4Used = true;
             tvStatusInfo.setText("BOOSTER: Signal Filter ACTIVATED!");
+
+            isTargetRevealedTemporarily = true;
+
+            if (revealTargetRunnable != null) {
+                uiHandler.removeCallbacks(revealTargetRunnable);
+            }
+
+            tvTarget.setText("NEXUS TARGET = " + nexusTarget);
+
+            revealTargetRunnable = () -> {
+                isTargetRevealedTemporarily = false;
+                tvTarget.setText(getTargetIntervalText());
+            };
+            uiHandler.postDelayed(revealTargetRunnable, 2500);
         }
     }
 
@@ -300,6 +321,7 @@ public class GameplayActivity extends AppCompatActivity {
     private void stopTimers() {
         if (clockRunnable != null) uiHandler.removeCallbacks(clockRunnable);
         if (oscillationRunnable != null) uiHandler.removeCallbacks(oscillationRunnable);
+        if (revealTargetRunnable != null) uiHandler.removeCallbacks(revealTargetRunnable);
     }
 
     @Override
