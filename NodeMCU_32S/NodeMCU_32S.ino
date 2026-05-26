@@ -4,6 +4,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+
 const char* ssid = "AndroidAP"; 
 const char* password = "gata1234";
 const char* serverIP = "10.117.253.162";
@@ -11,9 +12,11 @@ const int serverPort = 8080;
 
 WiFiClient client;
 
+
 #define JOY_VRX_PIN 36  
 #define JOY_VRY_PIN 39  
 #define JOY_BUTTON 32
+
 
 #define SW1_PIN 33    
 #define SW2_PIN 27     
@@ -32,11 +35,13 @@ WiFiClient client;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RST, OLED_CS);
 
+
 uint8_t freqDigits[3] = {0, 0, 0};
 uint8_t selectedIdx = 0;
 String serverMessage = "WAITING SERVER...";
 bool isConnectedToHost = false; 
 bool isGameStarted = false;     
+
 
 static unsigned long lastBoostMs[4] = {0,0,0,0};
 static unsigned long lastSubmitMs = 0;
@@ -45,23 +50,28 @@ bool lastJoyPressed = false;
 const unsigned long BOOST_COOLDOWN_MS  = 250;  
 const unsigned long SUBMIT_COOLDOWN_MS = 400;  
 
+
+
+
 unsigned long lastJoyMoveMs = 0;
 int joyCenterX = 2048, joyCenterY = 2048;
 
-unsigned long lastDebugPrint = 0;
+
+
 unsigned long lastOledRefresh = 0;
 static unsigned long lastWifiReconnectAttempt = 0;
 unsigned long lastReconnectAttempt = 0;
+
 
 unsigned long beepStartTime = 0;
 int currentBeepDuration = 0;
 bool isBeeping = false;
 
 
-bool lastSW1State = HIGH;
-bool lastSW2State = HIGH;
-bool lastSW3State = HIGH;
-bool lastSW4State = HIGH;
+volatile bool B1Pressed = false, B2Pressed = false, B3Pressed = false, B4Pressed = false;
+unsigned long lastISR_SW1 = 0, lastISR_SW2 = 0, lastISR_SW3 = 0, lastISR_SW4 = 0;
+#define DEBOUNCE_MS 120
+
 
 void drawTerminal();
 void drawWaitingScreen();
@@ -73,6 +83,12 @@ void debugHardware();
 void playBeep(int freq = 1000, int duration = 100);
 void playSong();
 void handleBuzzer();
+
+
+void IRAM_ATTR ISR_SW1() { if (millis() - lastISR_SW1 >= DEBOUNCE_MS) { lastISR_SW1 = millis(); B1Pressed = true; } }
+void IRAM_ATTR ISR_SW2() { if (millis() - lastISR_SW2 >= DEBOUNCE_MS) { lastISR_SW2 = millis(); B2Pressed = true; } }
+void IRAM_ATTR ISR_SW3() { if (millis() - lastISR_SW3 >= DEBOUNCE_MS) { lastISR_SW3 = millis(); B3Pressed = true; } }
+void IRAM_ATTR ISR_SW4() { if (millis() - lastISR_SW4 >= DEBOUNCE_MS) { lastISR_SW4 = millis(); B4Pressed = true; } }
 
 void setup() {
   Serial.begin(115200);
@@ -89,6 +105,12 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
   noTone(BUZZER_PIN);
 
+  attachInterrupt(digitalPinToInterrupt(SW1_PIN), ISR_SW1, FALLING);
+  attachInterrupt(digitalPinToInterrupt(SW2_PIN), ISR_SW2, FALLING);
+  attachInterrupt(digitalPinToInterrupt(SW3_PIN), ISR_SW3, FALLING);
+  attachInterrupt(digitalPinToInterrupt(SW4_PIN), ISR_SW4, FALLING);
+
+ 
   if(!display.begin(SSD1306_SWITCHCAPVCC)) {
     Serial.println(F("OLED allocation failed! Verifica firele!"));
     for(;;); 
@@ -110,6 +132,7 @@ void setup() {
   joyCenterY = sumY / 16;
   Serial.printf("Joystick Calibrat: X=%d, Y=%d\n", joyCenterX, joyCenterY);
 
+
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
   int attempts = 0;
@@ -124,9 +147,12 @@ void setup() {
   }
 }
 
+
+
 void loop() {
-  debugHardware();
+  
   handleBuzzer();
+
 
   if (WiFi.status() != WL_CONNECTED) {
     isConnectedToHost = false;
@@ -146,20 +172,23 @@ void loop() {
     return;
   }
 
+
   if (client.connected()) {
-    if (!isConnectedToHost) {
-      isConnectedToHost = true;
-      isGameStarted = true;          
-      sendToServer("CONNECT");
-      serverMessage = "LINK ESTABLISHED";
-      playSong();
-      drawTerminal();
-    }
+
+ if (!isConnectedToHost) {
+  isConnectedToHost = true;
+  isGameStarted = true;           
+  sendToServer("CONNECT");
+  serverMessage = "LINK ESTABLISHED";
+  drawTerminal();
+  playSong();
+}
     
     if (client.available()) {
       handleServerData();
     }
 
+ 
     if (!isGameStarted) {
       if (millis() - lastOledRefresh > 200) {
         display.clearDisplay();
@@ -175,30 +204,24 @@ void loop() {
     }
 
   
-    bool currentSW1 = digitalRead(SW1_PIN);
-    bool b1 = (currentSW1 == LOW && lastSW1State == HIGH); 
-    lastSW1State = currentSW1;
-
-    bool currentSW2 = digitalRead(SW2_PIN);
-    bool b2 = (currentSW2 == LOW && lastSW2State == HIGH);
-    lastSW2State = currentSW2;
-
-    bool currentSW3 = digitalRead(SW3_PIN);
-    bool b3 = (currentSW3 == LOW && lastSW3State == HIGH);
-    lastSW3State = currentSW3;
-
-    bool currentSW4 = digitalRead(SW4_PIN);
-    bool b4 = (currentSW4 == LOW && lastSW4State == HIGH);
-    lastSW4State = currentSW4;
+    noInterrupts();
+    bool b1 = B1Pressed; B1Pressed = false;
+    bool b2 = B2Pressed; B2Pressed = false;
+    bool b3 = B3Pressed; B3Pressed = false;
+    bool b4 = B4Pressed; B4Pressed = false;
+    interrupts();
 
     unsigned long now = millis();
+
 
     if (b1 && (now - lastBoostMs[0] >= BOOST_COOLDOWN_MS)) { lastBoostMs[0] = now; sendToServer("BOOST:1"); playBeep(2000, 50); }
     if (b2 && (now - lastBoostMs[1] >= BOOST_COOLDOWN_MS)) { lastBoostMs[1] = now; sendToServer("BOOST:2"); playBeep(2000, 50); }
     if (b3 && (now - lastBoostMs[2] >= BOOST_COOLDOWN_MS)) { lastBoostMs[2] = now; sendToServer("BOOST:3"); playBeep(2000, 50); }
     if (b4 && (now - lastBoostMs[3] >= BOOST_COOLDOWN_MS)) { lastBoostMs[3] = now; sendToServer("BOOST:4"); playBeep(2000, 50); }
 
+    
     handleJoystick();
+
     
     bool joyPressed = (digitalRead(JOY_BUTTON) == LOW);
     if (joyPressed && !lastJoyPressed) {
@@ -216,7 +239,7 @@ void loop() {
     return;
   }
 
-  // Handle Disconnection
+
   if (isConnectedToHost || isGameStarted) {
     isConnectedToHost = false;
     isGameStarted = false;
@@ -237,9 +260,16 @@ void loop() {
     drawWaitingScreen();
     lastOledRefresh = millis();
   }
+  
+  
+  
+
 }
 
+
+
 void playBeep(int freq, int duration) {
+  
   tone(BUZZER_PIN, freq);
   beepStartTime = millis();
   currentBeepDuration = duration;
@@ -247,15 +277,38 @@ void playBeep(int freq, int duration) {
 }
 
 void playSong() {
-  int melody[] = { 659, 523, 587, 659, 587, 523, 440, 523, 659 };
-  int duration[] = { 120, 120, 120, 180, 120, 120, 180, 150, 250 };
+  int melody[] = {
+    659, 
+    523, 
+    587, 
+    659,
+    587, 
+    523, 
+    440, 
+    523, 
+    659  
+  };
+
+  int duration[] = {
+    120,
+    120,
+    120,
+    180,
+    120,
+    120,
+    180,
+    150,
+    250
+  };
 
   for (int i = 0; i < 9; i++) {
     tone(BUZZER_PIN, melody[i]);
     delay(duration[i]);
+
     noTone(BUZZER_PIN);
     delay(35);
   }
+
   noTone(BUZZER_PIN);
 }
 
@@ -266,11 +319,9 @@ void handleBuzzer() {
   }
 }
 
-void debugHardware() {
-  if (millis() - lastDebugPrint > 500) { 
-    lastDebugPrint = millis();
-  }
-}
+
+
+
 
 void handleJoystick() {
   int rawLR = analogRead(JOY_VRY_PIN);
@@ -325,7 +376,7 @@ void handleServerData() {
       freqDigits[0] = (currentFreq / 100) % 10;
       freqDigits[1] = (currentFreq / 10) % 10;
       freqDigits[2] = currentFreq % 10;
-      serverMessage = "SYS DRIFT!";
+      
       playBeep(3000, 500); 
     } 
     else if(response == "TOO LOW") {

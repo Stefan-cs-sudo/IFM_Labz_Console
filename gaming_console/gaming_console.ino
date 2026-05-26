@@ -35,7 +35,7 @@ const unsigned long debounceDelay = 50;
 
 Adafruit_ST7735 lcd = Adafruit_ST7735(LCD_CS_PIN, LCD_DC_PIN, LCD_RST_PIN);
 
-// GAME VARIABLES 
+
 uint8_t freqDigits[3] = {0, 0, 0};
 uint8_t selectedIdx = 0;
 String serverMessage = "CONNECTING...";
@@ -43,7 +43,7 @@ bool isConnectedToHost = false;
 unsigned long lastJoyMoveMs = 0;
 int joyCenterX = 2048, joyCenterY = 2048;
 
-// ISR variables 
+
 volatile bool B1Pressed = false, B2Pressed = false, B3Pressed = false, B4Pressed = false;
 unsigned long lastISR_SW1 = 0, lastISR_SW2 = 0, lastISR_SW3 = 0, lastISR_SW4 = 0;
 #define DEBOUNCE_MS 120
@@ -101,7 +101,7 @@ for (int i = 0; i < n; i++) {
   for (int i = 0; i < 16; i++) { sumX += analogRead(JOY_VRY_PIN); sumY += analogRead(JOY_VRX_PIN); delay(5); }
   joyCenterX = sumX / 16; joyCenterY = sumY / 16;
 
-  // Wi-Fi Connection
+  
   LcdUtils_setCursor(0, 10);
   LcdUtils_printLine("WiFi Connecting...", YELLOW, FONT_DEFAULT);
   WiFi.begin(ssid, password);
@@ -357,13 +357,13 @@ void drawTerminal() {
   LcdUtils_setCursor(0, 20);
   LcdUtils_printLine("FREQUENCY TX:", WHITE, FONT_DEFAULT);
   
-  
+
   LcdUtils_setCursor(0, 35);
   char b[24];
   sprintf(b, "%d %d %d Hz", freqDigits[0], freqDigits[1], freqDigits[2]);
   LcdUtils_printLine(b, YELLOW, FONT_FREE_MONO_9PT);
 
-  
+
   const int xCenters[3] = {6, 26, 48};
   int cx = xCenters[selectedIdx];
   lcd.fillTriangle(cx - 5, 60, cx + 5, 60, cx, 53, GREEN);
