@@ -39,6 +39,7 @@ public class GameplayActivity extends AppCompatActivity {
 
     private boolean b1Used = false, b2Used = false, b3Used = false, b4Used = false;
     private boolean isTargetFrozen = false;
+    private boolean isTimeFrozen  =false;
     private boolean isGameOver = false;
     private Runnable revealTargetRunnable = null;
     private boolean isTargetRevealedTemporarily = false;
@@ -136,7 +137,7 @@ public class GameplayActivity extends AppCompatActivity {
     private void verifyFormula(String consoleName, int valueJustSent) {
         int currentSum = alphaValue + betaValue;
 
-        // LUCKY MATCH
+
         if (valueJustSent == nexusTarget) {
             int other = consoleName.equals("ALPHA") ? betaValue : alphaValue;
             if (other == 0) {
@@ -163,7 +164,7 @@ public class GameplayActivity extends AppCompatActivity {
     }
 
     private void applyPenalty() {
-        systemIntegrity -= 10;
+        systemIntegrity -= 5;
         tvIntegrity.setText("System Integrity: " + systemIntegrity + "%");
         if (systemIntegrity <= 0) {
             endGame(false, "INTEGRITY COMPROMISED (0%)");
@@ -188,7 +189,7 @@ public class GameplayActivity extends AppCompatActivity {
 
         if (gameDifficulty.equals("EASY")) timeLeft = 90;
         else if (gameDifficulty.equals("MEDIUM")) timeLeft = 75;
-        else timeLeft = 60;
+        else timeLeft = 75;
 
         nexusTarget = random.nextInt(1000);
 
@@ -239,16 +240,22 @@ public class GameplayActivity extends AppCompatActivity {
         clockRunnable = new Runnable() {
             @Override
             public void run() {
-                if (!isGameOver) {
+
+                if (isGameOver) return;
+
+
+                if (!isTimeFrozen) {
                     timeLeft--;
                     tvTimer.setText("TIME: " + timeLeft + "s");
 
                     if (timeLeft <= 0) {
                         endGame(false, "TIMEOUT: TIME HAS EXPIRED!");
-                    } else {
-                        uiHandler.postDelayed(this, 1000);
+                        return;
                     }
                 }
+
+
+                uiHandler.postDelayed(this, 1000);
             }
         };
         uiHandler.postDelayed(clockRunnable, 1000);
@@ -262,8 +269,14 @@ public class GameplayActivity extends AppCompatActivity {
         } else if (boostMsg.contains("BOOST:2") && !b2Used) {
             b2Used = true;
             isTargetFrozen = true;
-            tvStatusInfo.setText("BOOSTER: Cold Reboot! Target frozen for 15s");
-            uiHandler.postDelayed(() -> isTargetFrozen = false, 15000);
+            isTimeFrozen = true; // <-- FREEZE THE TIME
+
+            tvStatusInfo.setText("BOOSTER: Cold Reboot! Time & Target frozen (15s)");
+
+            uiHandler.postDelayed(() -> {
+                isTargetFrozen = false;
+                isTimeFrozen = false; // <-- UNFREEZE THE TIME
+            }, 15000);
         } else if (boostMsg.contains("BOOST:3") && !b3Used) {
             b3Used = true;
             systemIntegrity = Math.min(100, systemIntegrity + 30);

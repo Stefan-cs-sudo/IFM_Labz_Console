@@ -4,10 +4,10 @@
 #include "pca9557_cdd.h"
 #include "LcdUtils.h"
 
-// WIFI SETTINGS
+
 const char* ssid = "AndroidAP"; 
 const char* password = "gata1234";
-const char* serverIP = "10.118.144.124"; 
+const char* serverIP = "10.117.253.162"; 
 const int serverPort = 8080;
 
 WiFiClient client;
@@ -26,7 +26,7 @@ WiFiClient client;
 #define BUZZER_PIN 3
 #define PCA_ADDRESS 25
 
-//debouncing  joystick button
+
 bool lastBtnState = HIGH;
 bool currentBtnState = HIGH;
 unsigned long lastDebounceTime = 0;
@@ -50,7 +50,7 @@ unsigned long lastISR_SW1 = 0, lastISR_SW2 = 0, lastISR_SW3 = 0, lastISR_SW4 = 0
 
 unsigned long lastReconnectAttempt = 0;
 
-// PROTOTYPES
+
 void drawTerminal();
 void drawWaitingScreen();
 void sendToServer(String msg);
@@ -61,7 +61,7 @@ void handleDisconnection();
 void handleConnectionSuccess();
 void playBeep();
 
-// ISR
+
 void IRAM_ATTR ISR_SW1() { if (millis() - lastISR_SW1 >= DEBOUNCE_MS) { lastISR_SW1 = millis(); B1Pressed = true; } }
 void IRAM_ATTR ISR_SW2() { if (millis() - lastISR_SW2 >= DEBOUNCE_MS) { lastISR_SW2 = millis(); B2Pressed = true; } }
 void IRAM_ATTR ISR_SW3() { if (millis() - lastISR_SW3 >= DEBOUNCE_MS) { lastISR_SW3 = millis(); B3Pressed = true; } }
@@ -96,7 +96,7 @@ for (int i = 0; i < n; i++) {
   lcd.setTextSize(1);
   LcdUtils_init(&lcd);
 
-  // Init Joystick center
+ 
   long sumX = 0, sumY = 0;
   for (int i = 0; i < 16; i++) { sumX += analogRead(JOY_VRY_PIN); sumY += analogRead(JOY_VRX_PIN); delay(5); }
   joyCenterX = sumX / 16; joyCenterY = sumY / 16;
@@ -167,13 +167,13 @@ void loop() {
     return;
   }
 
-  // check the server
+  
   if (!client.connected()) {
     if (isConnectedToHost) {
       handleDisconnection();
     }
 
-    // reconnecting to server 
+  
     unsigned long now = millis();
     if (now - lastReconnectAttempt > 3000) {
       lastReconnectAttempt = now;
@@ -190,9 +190,9 @@ void loop() {
     return; 
   }
 
-  // 3. Dacă am ajuns aici, suntem conectați (WiFi + Server)
+  
   if (!isConnectedToHost) {
-    handleConnectionSuccess(); // Funcție nouă pentru sunet/ecran de succes
+    handleConnectionSuccess();
   }
 
     noInterrupts();
@@ -222,18 +222,18 @@ void handleJoystick() {
   int rawLR = analogRead(JOY_VRY_PIN);
   int rawUD = analogRead(JOY_VRX_PIN);
 
-  // initialize filter
+  
   if (filtLR < 0) filtLR = rawLR;
   if (filtUD < 0) filtUD = rawUD;
 
-  // low-pass filter (EMA)
+ 
   filtLR = (filtLR * 7 + rawLR) / 8;
   filtUD = (filtUD * 7 + rawUD) / 8;
 
   if (millis() - lastJoyMoveMs < 160) return;
 
-  // Bigger deadzone for noisy ADC/joystick
-  const int DEADZONE = 900;  // try 700..1300
+  
+  const int DEADZONE = 900; 
   int dLR = filtLR - joyCenterX;
   int dUD = filtUD - joyCenterY;
 
@@ -315,7 +315,7 @@ void handleServerData() {
         serverMessage = "ERROR: HIGH FREQ";
     }
     else if(response == "MATCH") {
-        // win/success
+   
         tone(BUZZER_PIN, 1500, 100); delay(100);
         tone(BUZZER_PIN, 2000, 300);
         serverMessage = "SECTOR UNLOCKED!";
@@ -357,18 +357,18 @@ void drawTerminal() {
   LcdUtils_setCursor(0, 20);
   LcdUtils_printLine("FREQUENCY TX:", WHITE, FONT_DEFAULT);
   
-  // DIGITS DRAW
+  
   LcdUtils_setCursor(0, 35);
   char b[24];
   sprintf(b, "%d %d %d Hz", freqDigits[0], freqDigits[1], freqDigits[2]);
   LcdUtils_printLine(b, YELLOW, FONT_FREE_MONO_9PT);
 
-  // MARKER JOYSTICK
+  
   const int xCenters[3] = {6, 26, 48};
   int cx = xCenters[selectedIdx];
   lcd.fillTriangle(cx - 5, 60, cx + 5, 60, cx, 53, GREEN);
 
-  // Server Message Box
+
   lcd.drawRect(0, 70, 128, 25, ST77XX_GRAY);
   LcdUtils_setCursor(3, 78);
   LcdUtils_printLine(serverMessage.c_str(), RED, FONT_DEFAULT);
