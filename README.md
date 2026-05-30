@@ -20,7 +20,7 @@ The controllers handle player input and transmit data to the mobile device. The 
 * **Arduino Nano:** Acts as Console 2, offering a compact, reliable hardware interface,this console was given to us by the organizers of the challenge.
 *  ** The Fusion representation of the console **  : https://a360.co/4dywyMw 
 *  **And a kicad representation of the PCB:
-![Kicad](hPCB .png)
+![Kicad](https://github.com/Stefan-cs-sudo/IFM_Labz_Console/blob/main/PCB%20.png)
 
 
 ###  Mobile Application (Android Studio)
@@ -43,7 +43,7 @@ The game itself runs on an Android device and processes inputs from both control
 
 ## 👥 Authors
 
-* [Deac Stefan](https://github.com/Stefan-cs-sudo))
+* [Deac Stefan](https://github.com/Stefan-cs-sudo)
 * [Popa Maria](https://github.com/popam482)
 
 ***
