@@ -20,7 +20,7 @@ The controllers handle player input and transmit data to the mobile device. The 
 * **Arduino Nano:** Acts as Console 2, offering a compact, reliable hardware interface,this console was given to us by the organizers of the challenge.
 *  ** The Fusion representation of the console **  : https://a360.co/4dywyMw 
 *  **And a kicad representation of the PCB:
-![Kicad](https://user-images.githubusercontent.com/...)
+![Kicad](hPCB .png)
 
 
 ###  Mobile Application (Android Studio)
